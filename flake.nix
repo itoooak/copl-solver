@@ -25,6 +25,7 @@
         { self', pkgs, ... }:
         {
           haskellProjects.default = { };
+          packages.default = self'.packages.copl-solver;
         };
     };
 }
