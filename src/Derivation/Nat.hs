@@ -1,38 +1,14 @@
 module Derivation.Nat where
 
-import Common.Parser (Parser, natP, symbol)
-import Common.Syntax (Nat (..), mulNat)
-import Control.Applicative ((<|>))
-
-data Judgment
-  = Plus Nat Nat Nat
-  | Times Nat Nat Nat
-
-instance Show Judgment where
-  show (Plus n1 n2 n3) =
-    show n1 ++ " plus " ++ show n2 ++ " is " ++ show n3
-  show (Times n1 n2 n3) =
-    show n1 ++ " times " ++ show n2 ++ " is " ++ show n3
-
-judgmentP :: Parser Judgment
-judgmentP = do
-  n1 <- natP
-  op <- symbol "plus" <|> symbol "times"
-  n2 <- natP
-  _ <- symbol "is"
-  n3 <- natP
-  case op of
-    "plus" -> return $ Plus n1 n2 n3
-    "times" -> return $ Times n1 n2 n3
-    _ -> error "unreachable"
+import Common.Syntax (Nat (..), NatJudgment (..), mulNat)
 
 data Derivation
-  = PZero Judgment
-  | PSucc Judgment Derivation
-  | TZero Judgment
-  | TSucc Judgment Derivation Derivation
+  = PZero NatJudgment
+  | PSucc NatJudgment Derivation
+  | TZero NatJudgment
+  | TSucc NatJudgment Derivation Derivation
 
-derive :: Judgment -> Maybe Derivation
+derive :: NatJudgment -> Maybe Derivation
 derive = \case
   j@(Plus Z n2 n3)
     | n2 == n3 -> Just $ PZero j
