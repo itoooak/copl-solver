@@ -15,6 +15,7 @@ library
     exposed-modules:
         Common.Syntax,
         Common.Parser,
+        Derivation.Format,
         Derivation.Nat,
         Derivation.CompareNatCommon,
         Derivation.CompareNat1,
@@ -22,7 +23,9 @@ library
         Derivation.CompareNat3,
         Derivation.EvalNatExp,
         Derivation.ReduceNatExp,
-        Derivation.EvalML1
+        Derivation.EvalMLCommon,
+        Derivation.EvalML1,
+        Derivation.EvalML1Err
     other-modules:
     build-depends:    parser-combinators, megaparsec, base ^>=4.20.2.0
     hs-source-dirs:   src

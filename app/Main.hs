@@ -6,7 +6,9 @@ import Derivation.CompareNat2 qualified as CompareNat2
 import Derivation.CompareNat3 qualified as CompareNat3
 import Derivation.CompareNatCommon qualified as CompareNatCommon
 import Derivation.EvalML1 qualified as EvalML1
+import Derivation.EvalML1Err qualified as EvalML1Err
 import Derivation.EvalNatExp qualified as EvalNatExp
+import Derivation.Format (FormatDerivation (format))
 import Derivation.Nat qualified as Nat
 import Derivation.ReduceNatExp qualified as ReduceNatExp
 import System.Environment (getArgs)
@@ -23,6 +25,7 @@ main = do
     ["EvalNatExp"] -> execute EvalNatExp.evalJudgmentP EvalNatExp.derive EvalNatExp.formatDerivation
     ["ReduceNatExp"] -> execute ReduceNatExp.reduceJudgmentP ReduceNatExp.derive ReduceNatExp.formatDerivation
     ["EvalML1"] -> execute EvalML1.evalJudgmentP EvalML1.evalDerive EvalML1.formatEvalDerivation
+    ["EvalML1Err"] -> execute EvalML1Err.evalJudgmentP EvalML1Err.evalDerive format
     _ -> die "System name is not provided."
 
 execute ::
