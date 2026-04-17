@@ -7,6 +7,7 @@ import Derivation.CompareNat3 qualified as CompareNat3
 import Derivation.CompareNatCommon qualified as CompareNatCommon
 import Derivation.EvalNatExp qualified as EvalNatExp
 import Derivation.Nat qualified as Nat
+import Derivation.ReduceNatExp qualified as ReduceNatExp
 import System.Environment (getArgs)
 import System.Exit (die)
 
@@ -19,6 +20,7 @@ main = do
     ["CompareNat2"] -> execute CompareNatCommon.judgmentP CompareNat2.derive CompareNat2.formatDerivation
     ["CompareNat3"] -> execute CompareNatCommon.judgmentP CompareNat3.derive CompareNat3.formatDerivation
     ["EvalNatExp"] -> execute EvalNatExp.evalJudgmentP EvalNatExp.derive EvalNatExp.formatDerivation
+    ["ReduceNatExp"] -> execute ReduceNatExp.reduceJudgmentP ReduceNatExp.derive ReduceNatExp.formatDerivation
     _ -> die "System name is not provided."
 
 execute ::

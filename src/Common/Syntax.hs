@@ -21,11 +21,22 @@ data Expr
   = Nat Nat
   | Add Expr Expr
   | Mult Expr Expr
+  deriving (Eq)
 
 evalExpr :: Expr -> Nat
 evalExpr (Nat n) = n
 evalExpr (Add e1 e2) = addNat (evalExpr e1) (evalExpr e2)
 evalExpr (Mult e1 e2) = mulNat (evalExpr e1) (evalExpr e2)
+
+-- TODO: 非決定性を扱う
+reduceExpr :: Expr -> Expr
+reduceExpr (Nat n) = undefined
+reduceExpr (Add (Nat n1) (Nat n2)) = Nat $ addNat n1 n2
+reduceExpr (Add n@(Nat _) e) = Add n $ reduceExpr e
+reduceExpr (Add e1 e2) = Add (reduceExpr e1) e2
+reduceExpr (Mult (Nat n1) (Nat n2)) = Nat $ mulNat n1 n2
+reduceExpr (Mult n@(Nat _) e) = Mult n $ reduceExpr e
+reduceExpr (Mult e1 e2) = Mult (reduceExpr e1) e2
 
 instance Show Expr where
   show (Nat n) = show n

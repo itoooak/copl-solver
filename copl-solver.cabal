@@ -20,7 +20,8 @@ library
         Derivation.CompareNat1,
         Derivation.CompareNat2,
         Derivation.CompareNat3,
-        Derivation.EvalNatExp
+        Derivation.EvalNatExp,
+        Derivation.ReduceNatExp
     other-modules:
     build-depends:    parser-combinators, megaparsec, base ^>=4.20.2.0
     hs-source-dirs:   src
