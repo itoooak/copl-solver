@@ -1,4 +1,4 @@
-module Derivation.EvalMLCommon where
+module Derivation.EvalML1.Shared where
 
 import Common.Parser (Parser, lexeme, sc, symbol)
 import Control.Applicative ((<|>))
@@ -33,10 +33,10 @@ instance Show Exp where
   show (Op op e1 e2) = "(" ++ show e1 ++ opStr ++ show e2 ++ ")"
    where
     opStr = case op of
-      OAdd -> "+"
-      OSub -> "-"
-      OMult -> "*"
-      OLt -> "<"
+      Add -> "+"
+      Sub -> "-"
+      Mult -> "*"
+      Lt -> "<"
   show (If e1 e2 e3) =
     "if " ++ show e1 ++ " then " ++ show e2 ++ " else " ++ show e3
 
@@ -46,10 +46,10 @@ evalExp (Op op e1 e2) = do
   v1 <- evalExp e1
   v2 <- evalExp e2
   case (op, v1, v2) of
-    (OAdd, Int i1, Int i2) -> Just $ Int $ i1 + i2
-    (OSub, Int i1, Int i2) -> Just $ Int $ i1 - i2
-    (OMult, Int i1, Int i2) -> Just $ Int $ i1 * i2
-    (OLt, Int i1, Int i2) -> Just $ Bool $ i1 < i2
+    (Add, Int i1, Int i2) -> Just $ Int $ i1 + i2
+    (Sub, Int i1, Int i2) -> Just $ Int $ i1 - i2
+    (Mult, Int i1, Int i2) -> Just $ Int $ i1 * i2
+    (Lt, Int i1, Int i2) -> Just $ Bool $ i1 < i2
     _ -> Nothing
 evalExp (If e1 e2 e3) = do
   v1 <- evalExp e1
@@ -58,7 +58,7 @@ evalExp (If e1 e2 e3) = do
     Bool False -> evalExp e3
     _ -> Nothing
 
-data Prim = OAdd | OSub | OMult | OLt
+data Prim = Add | Sub | Mult | Lt
 
 ifP :: Parser Exp
 ifP = do
@@ -78,10 +78,10 @@ expP = makeExprParser atom table
       <|> ifP
       <|> between (symbol "(") (symbol ")") expP
   table =
-    [ [InfixL (Op OMult <$ symbol "*")]
+    [ [InfixL (Op Mult <$ symbol "*")]
     ,
-      [ InfixL (Op OAdd <$ symbol "+")
-      , InfixL (Op OSub <$ symbol "-")
+      [ InfixL (Op Add <$ symbol "+")
+      , InfixL (Op Sub <$ symbol "-")
       ]
-    , [InfixL (Op OLt <$ symbol "<")]
+    , [InfixL (Op Lt <$ symbol "<")]
     ]

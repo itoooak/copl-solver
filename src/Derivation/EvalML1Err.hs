@@ -2,7 +2,7 @@ module Derivation.EvalML1Err where
 
 import Common.Parser (Parser, symbol)
 import Control.Applicative ((<|>))
-import Derivation.EvalMLCommon (Exp (..), Prim (..), Value (..), evalExp, expP, valueP)
+import Derivation.EvalML1.Shared (Exp (..), Prim (..), Value (..), evalExp, expP, valueP)
 import Derivation.Format qualified as F
 
 data Res
@@ -133,47 +133,47 @@ evalDerive = \case
     deriveByResult i1 i2 = case r of
       Error -> Nothing
       Val v -> case (op, v) of
-        (OAdd, Int i3) ->
+        (Add, Int i3) ->
           EPlus j
             <$> evalDerive (EvalTo e1 (Val (Int i1)))
             <*> evalDerive (EvalTo e2 (Val (Int i2)))
             <*> binopDerive (Plus i1 i2 (Val (Int i3)))
-        (OSub, Int i3) ->
+        (Sub, Int i3) ->
           EMinus j
             <$> evalDerive (EvalTo e1 (Val (Int i1)))
             <*> evalDerive (EvalTo e2 (Val (Int i2)))
             <*> binopDerive (Minus i1 i2 (Val (Int i3)))
-        (OMult, Int i3) ->
+        (Mult, Int i3) ->
           ETimes j
             <$> evalDerive (EvalTo e1 (Val (Int i1)))
             <*> evalDerive (EvalTo e2 (Val (Int i2)))
             <*> binopDerive (Times i1 i2 (Val (Int i3)))
-        (OLt, Bool b) ->
+        (Lt, Bool b) ->
           ELt j
             <$> evalDerive (EvalTo e1 (Val (Int i1)))
             <*> evalDerive (EvalTo e2 (Val (Int i2)))
             <*> binopDerive (LessThan i1 i2 (Val (Bool b)))
         _ -> Nothing
     mkBoolL = case op of
-      OAdd -> EPlusBoolL
-      OSub -> EMinusBoolL
-      OMult -> ETimesBoolL
-      OLt -> ELtBoolL
+      Add -> EPlusBoolL
+      Sub -> EMinusBoolL
+      Mult -> ETimesBoolL
+      Lt -> ELtBoolL
     mkErrorL = case op of
-      OAdd -> EPlusErrorL
-      OSub -> EMinusErrorL
-      OMult -> ETimesErrorL
-      OLt -> ELtErrorL
+      Add -> EPlusErrorL
+      Sub -> EMinusErrorL
+      Mult -> ETimesErrorL
+      Lt -> ELtErrorL
     mkBoolR = case op of
-      OAdd -> EPlusBoolR
-      OSub -> EMinusBoolR
-      OMult -> ETimesBoolR
-      OLt -> ELtBoolR
+      Add -> EPlusBoolR
+      Sub -> EMinusBoolR
+      Mult -> ETimesBoolR
+      Lt -> ELtBoolR
     mkErrorR = case op of
-      OAdd -> EPlusErrorR
-      OSub -> EMinusErrorR
-      OMult -> ETimesErrorR
-      OLt -> ELtErrorR
+      Add -> EPlusErrorR
+      Sub -> EMinusErrorR
+      Mult -> ETimesErrorR
+      Lt -> ELtErrorR
   _ -> Nothing
 
 binopDerive :: BinopJudgment -> Maybe BinopDerivation

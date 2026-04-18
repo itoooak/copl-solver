@@ -23,7 +23,7 @@ library
         Derivation.CompareNat.System3,
         Derivation.EvalNatExp,
         Derivation.ReduceNatExp,
-        Derivation.EvalMLCommon,
+        Derivation.EvalML1.Shared,
         Derivation.EvalML1,
         Derivation.EvalML1Err
     other-modules:
