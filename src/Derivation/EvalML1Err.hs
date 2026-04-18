@@ -100,6 +100,67 @@ data BinopDerivation
   | BTimes BinopJudgment
   | BLT BinopJudgment
 
+data OpSpec = OpSpec
+  { mkNormal :: EvalJudgment -> EvalDerivation -> EvalDerivation -> BinopDerivation -> EvalDerivation
+  , mkBoolL :: EvalJudgment -> EvalDerivation -> EvalDerivation
+  , mkErrorL :: EvalJudgment -> EvalDerivation -> EvalDerivation
+  , mkBoolR :: EvalJudgment -> EvalDerivation -> EvalDerivation
+  , mkErrorR :: EvalJudgment -> EvalDerivation -> EvalDerivation
+  , mkBinopJudgment :: Int -> Int -> Res -> BinopJudgment
+  , expectedResult :: Value -> Bool
+  }
+
+opSpec :: Prim -> OpSpec
+opSpec = \case
+  Add ->
+    OpSpec
+      { mkNormal = EPlus
+      , mkBoolL = EPlusBoolL
+      , mkErrorL = EPlusErrorL
+      , mkBoolR = EPlusBoolR
+      , mkErrorR = EPlusErrorR
+      , mkBinopJudgment = Plus
+      , expectedResult = \case
+          Int _ -> True
+          _ -> False
+      }
+  Sub ->
+    OpSpec
+      { mkNormal = EMinus
+      , mkBoolL = EMinusBoolL
+      , mkErrorL = EMinusErrorL
+      , mkBoolR = EMinusBoolR
+      , mkErrorR = EMinusErrorR
+      , mkBinopJudgment = Minus
+      , expectedResult = \case
+          Int _ -> True
+          _ -> False
+      }
+  Mult ->
+    OpSpec
+      { mkNormal = ETimes
+      , mkBoolL = ETimesBoolL
+      , mkErrorL = ETimesErrorL
+      , mkBoolR = ETimesBoolR
+      , mkErrorR = ETimesErrorR
+      , mkBinopJudgment = Times
+      , expectedResult = \case
+          Int _ -> True
+          _ -> False
+      }
+  Lt ->
+    OpSpec
+      { mkNormal = ELt
+      , mkBoolL = ELtBoolL
+      , mkErrorL = ELtErrorL
+      , mkBoolR = ELtBoolR
+      , mkErrorR = ELtErrorR
+      , mkBinopJudgment = LessThan
+      , expectedResult = \case
+          Bool _ -> True
+          _ -> False
+      }
+
 evalDerive :: EvalJudgment -> Maybe EvalDerivation
 evalDerive = \case
   j@(EvalTo (Value (Int i1)) (Val (Int i2))) | i1 == i2 -> Just $ EInt j
@@ -122,58 +183,24 @@ evalDerive = \case
         EIfF j <$> evalDerive (EvalTo e1 (Val (Bool False))) <*> evalDerive (EvalTo e3 r)
       _ -> Nothing
   j@(EvalTo (Op op e1 e2) r) -> do
-    withIntOperand j e1 mkBoolL mkErrorL $ \i1 ->
-      withIntOperand j e2 mkBoolR mkErrorR $ \i2 ->
-        deriveByResult i1 i2
+    withIntOperand j e1 (mkBoolL spec) (mkErrorL spec) $ \i1 ->
+      withIntOperand j e2 (mkBoolR spec) (mkErrorR spec) $ \i2 ->
+        deriveByResult spec i1 i2
    where
+    spec = opSpec op
     withIntOperand j' e mkBool mkError k = case evalExp e of
       Just (Int i) -> k i
       Just (Bool b) -> mkBool j' <$> evalDerive (EvalTo e (Val (Bool b)))
       Nothing -> mkError j' <$> evalDerive (EvalTo e Error)
-    deriveByResult i1 i2 = case r of
+    deriveByResult s i1 i2 = case r of
       Error -> Nothing
-      Val v -> case (op, v) of
-        (Add, Int i3) ->
-          EPlus j
-            <$> evalDerive (EvalTo e1 (Val (Int i1)))
-            <*> evalDerive (EvalTo e2 (Val (Int i2)))
-            <*> binopDerive (Plus i1 i2 (Val (Int i3)))
-        (Sub, Int i3) ->
-          EMinus j
-            <$> evalDerive (EvalTo e1 (Val (Int i1)))
-            <*> evalDerive (EvalTo e2 (Val (Int i2)))
-            <*> binopDerive (Minus i1 i2 (Val (Int i3)))
-        (Mult, Int i3) ->
-          ETimes j
-            <$> evalDerive (EvalTo e1 (Val (Int i1)))
-            <*> evalDerive (EvalTo e2 (Val (Int i2)))
-            <*> binopDerive (Times i1 i2 (Val (Int i3)))
-        (Lt, Bool b) ->
-          ELt j
-            <$> evalDerive (EvalTo e1 (Val (Int i1)))
-            <*> evalDerive (EvalTo e2 (Val (Int i2)))
-            <*> binopDerive (LessThan i1 i2 (Val (Bool b)))
-        _ -> Nothing
-    mkBoolL = case op of
-      Add -> EPlusBoolL
-      Sub -> EMinusBoolL
-      Mult -> ETimesBoolL
-      Lt -> ELtBoolL
-    mkErrorL = case op of
-      Add -> EPlusErrorL
-      Sub -> EMinusErrorL
-      Mult -> ETimesErrorL
-      Lt -> ELtErrorL
-    mkBoolR = case op of
-      Add -> EPlusBoolR
-      Sub -> EMinusBoolR
-      Mult -> ETimesBoolR
-      Lt -> ELtBoolR
-    mkErrorR = case op of
-      Add -> EPlusErrorR
-      Sub -> EMinusErrorR
-      Mult -> ETimesErrorR
-      Lt -> ELtErrorR
+      Val v
+        | expectedResult s v ->
+            mkNormal s j
+              <$> evalDerive (EvalTo e1 (Val (Int i1)))
+              <*> evalDerive (EvalTo e2 (Val (Int i2)))
+              <*> binopDerive (mkBinopJudgment s i1 i2 (Val v))
+        | otherwise -> Nothing
   _ -> Nothing
 
 binopDerive :: BinopJudgment -> Maybe BinopDerivation
