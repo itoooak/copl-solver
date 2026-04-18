@@ -1,8 +1,8 @@
-module Derivation.CompareNat3 where
+module Derivation.CompareNat.System3 where
 
-import Common.Syntax (Nat (..))
-import Derivation.CompareNatCommon (Judgment (..))
+import Derivation.CompareNat.Shared (Judgment (..))
 import Derivation.Format qualified as F
+import Derivation.Nat.Shared (Nat (..))
 
 data Derivation
   = LSucc Judgment
@@ -10,7 +10,7 @@ data Derivation
 
 derive :: Judgment -> Maybe Derivation
 derive = \case
-  j@(LessThan n1 n2) | S (n1) == n2 -> Just $ LSucc j
+  j@(LessThan n1 n2) | S n1 == n2 -> Just $ LSucc j
   j@(LessThan n1 (S n2)) -> LSuccR j <$> derive (LessThan n1 n2)
   _ -> Nothing
 

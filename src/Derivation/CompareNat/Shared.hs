@@ -1,7 +1,7 @@
-module Derivation.CompareNatCommon where
+module Derivation.CompareNat.Shared where
 
-import Common.Parser (Parser, natP, symbol)
-import Common.Syntax (Nat)
+import Common.Parser (Parser, symbol)
+import Derivation.Nat.Shared (Nat, natP)
 
 data Judgment
   = LessThan Nat Nat

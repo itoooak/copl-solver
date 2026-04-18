@@ -1,8 +1,8 @@
-module Derivation.CompareNat2 where
+module Derivation.CompareNat.System2 where
 
-import Common.Syntax (Nat (..))
-import Derivation.CompareNatCommon (Judgment (..))
+import Derivation.CompareNat.Shared (Judgment (..))
 import Derivation.Format qualified as F
+import Derivation.Nat.Shared (Nat (..))
 
 data Derivation
   = LZero Judgment

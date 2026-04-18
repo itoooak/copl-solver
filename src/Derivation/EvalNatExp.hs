@@ -1,9 +1,9 @@
 module Derivation.EvalNatExp where
 
-import Common.Parser (Parser, exprP, natP, symbol)
-import Common.Syntax (Expr (..), Nat (..), NatJudgment (..), evalExpr)
+import Common.Parser (Parser, symbol)
 import Derivation.Format qualified as F
-import Derivation.Nat qualified as DNat
+import Derivation.Nat.Shared (Expr (..), Judgment (..), Nat (..), evalExpr, exprP, natP)
+import Derivation.Nat.System qualified as DNat
 
 data EvalJudgment
   = EvalTo Expr Nat

@@ -1,10 +1,10 @@
 module Derivation.ReduceNatExp where
 
-import Common.Parser (Parser, exprP, symbol)
-import Common.Syntax (Expr (..), NatJudgment (..), reduceExpr)
+import Common.Parser (Parser, symbol)
 import Control.Applicative ((<|>))
 import Derivation.Format qualified as F
-import Derivation.Nat qualified as DNat
+import Derivation.Nat.Shared (Expr (..), Judgment (..), exprP, reduceExpr)
+import Derivation.Nat.System qualified as DNat
 
 data ReduceJudgment
   = ReduceTo Expr Expr

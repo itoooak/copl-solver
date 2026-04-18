@@ -1,15 +1,15 @@
-module Derivation.Nat where
+module Derivation.Nat.System where
 
-import Common.Syntax (Nat (..), NatJudgment (..), mulNat)
 import Derivation.Format qualified as F
+import Derivation.Nat.Shared (Judgment (..), Nat (..), mulNat)
 
 data Derivation
-  = PZero NatJudgment
-  | PSucc NatJudgment Derivation
-  | TZero NatJudgment
-  | TSucc NatJudgment Derivation Derivation
+  = PZero Judgment
+  | PSucc Judgment Derivation
+  | TZero Judgment
+  | TSucc Judgment Derivation Derivation
 
-derive :: NatJudgment -> Maybe Derivation
+derive :: Judgment -> Maybe Derivation
 derive = \case
   j@(Plus Z n2 n3)
     | n2 == n3 -> Just $ PZero j

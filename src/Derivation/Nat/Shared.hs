@@ -1,4 +1,10 @@
-module Common.Syntax where
+module Derivation.Nat.Shared where
+
+import Common.Parser (Parser, lexeme, symbol)
+import Control.Applicative ((<|>))
+import Control.Monad.Combinators.Expr (Operator (InfixL), makeExprParser)
+import Text.Megaparsec (between)
+import Text.Megaparsec.Char (char)
 
 data Nat
   = Z
@@ -28,9 +34,8 @@ evalExpr (Nat n) = n
 evalExpr (Add e1 e2) = addNat (evalExpr e1) (evalExpr e2)
 evalExpr (Mult e1 e2) = mulNat (evalExpr e1) (evalExpr e2)
 
--- TODO: 非決定性を扱う
 reduceExpr :: Expr -> Expr
-reduceExpr (Nat n) = undefined
+reduceExpr (Nat _) = undefined
 reduceExpr (Add (Nat n1) (Nat n2)) = Nat $ addNat n1 n2
 reduceExpr (Add n@(Nat _) e) = Add n $ reduceExpr e
 reduceExpr (Add e1 e2) = Add (reduceExpr e1) e2
@@ -43,12 +48,39 @@ instance Show Expr where
   show (Add e1 e2) = "(" ++ show e1 ++ "+" ++ show e2 ++ ")"
   show (Mult e1 e2) = "(" ++ show e1 ++ "*" ++ show e2 ++ ")"
 
-data NatJudgment
+data Judgment
   = Plus Nat Nat Nat
   | Times Nat Nat Nat
 
-instance Show NatJudgment where
+instance Show Judgment where
   show (Plus n1 n2 n3) =
     show n1 ++ " plus " ++ show n2 ++ " is " ++ show n3
   show (Times n1 n2 n3) =
     show n1 ++ " times " ++ show n2 ++ " is " ++ show n3
+
+natP :: Parser Nat
+natP =
+  lexeme $
+    (Z <$ char 'Z')
+      <|> (S <$> (char 'S' *> between (char '(') (char ')') natP))
+
+exprP :: Parser Expr
+exprP = makeExprParser atom table
+ where
+  atom = (Nat <$> natP) <|> (between (symbol "(") (symbol ")") exprP)
+  table =
+    [ [InfixL (Mult <$ symbol "*")]
+    , [InfixL (Add <$ symbol "+")]
+    ]
+
+judgmentP :: Parser Judgment
+judgmentP = do
+  n1 <- natP
+  op <- symbol "plus" <|> symbol "times"
+  n2 <- natP
+  _ <- symbol "is"
+  n3 <- natP
+  case op of
+    "plus" -> return $ Plus n1 n2 n3
+    "times" -> return $ Times n1 n2 n3
+    _ -> error "unreachable"

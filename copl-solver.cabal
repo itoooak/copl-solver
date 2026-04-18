@@ -13,14 +13,14 @@ common warnings
 library
     import:           warnings
     exposed-modules:
-        Common.Syntax,
         Common.Parser,
         Derivation.Format,
-        Derivation.Nat,
-        Derivation.CompareNatCommon,
-        Derivation.CompareNat1,
-        Derivation.CompareNat2,
-        Derivation.CompareNat3,
+        Derivation.Nat.Shared,
+        Derivation.Nat.System,
+        Derivation.CompareNat.Shared,
+        Derivation.CompareNat.System1,
+        Derivation.CompareNat.System2,
+        Derivation.CompareNat.System3,
         Derivation.EvalNatExp,
         Derivation.ReduceNatExp,
         Derivation.EvalMLCommon,
