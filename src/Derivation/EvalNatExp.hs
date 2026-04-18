@@ -2,6 +2,7 @@ module Derivation.EvalNatExp where
 
 import Common.Parser (Parser, exprP, natP, symbol)
 import Common.Syntax (Expr (..), Nat (..), NatJudgment (..), evalExpr)
+import Derivation.Format qualified as F
 import Derivation.Nat qualified as DNat
 
 data EvalJudgment
@@ -38,25 +39,8 @@ derive = \case
     n2 = evalExpr e2
   _ -> Nothing
 
-formatDerivation :: Derivation -> String
-formatDerivation = \case
-  EConst j ->
-    show j ++ " by E-Const {}"
-  EPlus j p1 p2 np ->
-    show j
-      ++ " by E-Plus { "
-      ++ formatDerivation p1
-      ++ "; "
-      ++ formatDerivation p2
-      ++ "; "
-      ++ DNat.formatDerivation np
-      ++ " }"
-  ETimes j p1 p2 np ->
-    show j
-      ++ " by E-Times { "
-      ++ formatDerivation p1
-      ++ "; "
-      ++ formatDerivation p2
-      ++ "; "
-      ++ DNat.formatDerivation np
-      ++ " }"
+instance F.FormatDerivation Derivation where
+  format = \case
+    EConst j -> F.formatBy "E-Const" j []
+    EPlus j p1 p2 np -> F.formatBy "E-Plus" j [F.MkDerivation p1, F.MkDerivation p2, F.MkDerivation np]
+    ETimes j p1 p2 np -> F.formatBy "E-Times" j [F.MkDerivation p1, F.MkDerivation p2, F.MkDerivation np]

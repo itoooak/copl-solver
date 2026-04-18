@@ -3,6 +3,7 @@ module Derivation.EvalML1 where
 import Common.Parser (Parser, symbol)
 import Control.Applicative ((<|>))
 import Derivation.EvalMLCommon (Exp (..), Prim (..), Value (..), evalExp, expP, valueP)
+import Derivation.Format qualified as F
 
 data EvalJudgment = EvalTo Exp Value
 
@@ -115,64 +116,20 @@ binopDerive = \case
   j@(LessThan i1 i2 b) | (i1 < i2) == b -> Just $ BLT j
   _ -> Nothing
 
-formatEvalDerivation :: EvalDerivation -> String
-formatEvalDerivation = \case
-  EInt j -> show j ++ " by E-Int {}"
-  EBool j -> show j ++ " by E-Bool {}"
-  EIfT j p1 p2 ->
-    show j
-      ++ " by E-IfT { "
-      ++ formatEvalDerivation p1
-      ++ "; "
-      ++ formatEvalDerivation p2
-      ++ " }"
-  EIfF j p1 p2 ->
-    show j
-      ++ " by E-IfF { "
-      ++ formatEvalDerivation p1
-      ++ "; "
-      ++ formatEvalDerivation p2
-      ++ " }"
-  EPlus j p1 p2 bp ->
-    show j
-      ++ " by E-Plus { "
-      ++ formatEvalDerivation p1
-      ++ "; "
-      ++ formatEvalDerivation p2
-      ++ "; "
-      ++ formatBinopDerivation bp
-      ++ " }"
-  EMinus j p1 p2 bp ->
-    show j
-      ++ " by E-Minus { "
-      ++ formatEvalDerivation p1
-      ++ "; "
-      ++ formatEvalDerivation p2
-      ++ "; "
-      ++ formatBinopDerivation bp
-      ++ " }"
-  ETimes j p1 p2 bp ->
-    show j
-      ++ " by E-Times { "
-      ++ formatEvalDerivation p1
-      ++ "; "
-      ++ formatEvalDerivation p2
-      ++ "; "
-      ++ formatBinopDerivation bp
-      ++ " }"
-  ELt j p1 p2 bp ->
-    show j
-      ++ " by E-Lt { "
-      ++ formatEvalDerivation p1
-      ++ "; "
-      ++ formatEvalDerivation p2
-      ++ "; "
-      ++ formatBinopDerivation bp
-      ++ " }"
+instance F.FormatDerivation EvalDerivation where
+  format = \case
+    EInt j -> F.formatBy "E-Int" j []
+    EBool j -> F.formatBy "E-Bool" j []
+    EIfT j p1 p2 -> F.formatBy "E-IfT" j [F.MkDerivation p1, F.MkDerivation p2]
+    EIfF j p1 p2 -> F.formatBy "E-IfF" j [F.MkDerivation p1, F.MkDerivation p2]
+    EPlus j p1 p2 bp -> F.formatBy "E-Plus" j [F.MkDerivation p1, F.MkDerivation p2, F.MkDerivation bp]
+    EMinus j p1 p2 bp -> F.formatBy "E-Minus" j [F.MkDerivation p1, F.MkDerivation p2, F.MkDerivation bp]
+    ETimes j p1 p2 bp -> F.formatBy "E-Times" j [F.MkDerivation p1, F.MkDerivation p2, F.MkDerivation bp]
+    ELt j p1 p2 bp -> F.formatBy "E-Lt" j [F.MkDerivation p1, F.MkDerivation p2, F.MkDerivation bp]
 
-formatBinopDerivation :: BinopDerivation -> String
-formatBinopDerivation = \case
-  BPlus j -> show j ++ " by B-Plus {}"
-  BMinus j -> show j ++ " by B-Minus {}"
-  BTimes j -> show j ++ " by B-Times {}"
-  BLT j -> show j ++ " by B-Lt {}"
+instance F.FormatDerivation BinopDerivation where
+  format = \case
+    BPlus j -> F.formatBy "B-Plus" j []
+    BMinus j -> F.formatBy "B-Minus" j []
+    BTimes j -> F.formatBy "B-Times" j []
+    BLT j -> F.formatBy "B-Lt" j []

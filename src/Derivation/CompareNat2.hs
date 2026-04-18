@@ -2,6 +2,7 @@ module Derivation.CompareNat2 where
 
 import Common.Syntax (Nat (..))
 import Derivation.CompareNatCommon (Judgment (..))
+import Derivation.Format qualified as F
 
 data Derivation
   = LZero Judgment
@@ -14,9 +15,7 @@ derive = \case
     LSuccSucc j <$> derive (LessThan n1 n2)
   _ -> Nothing
 
-formatDerivation :: Derivation -> String
-formatDerivation = \case
-  LZero j ->
-    show j ++ " by L-Zero {}"
-  LSuccSucc j p ->
-    show j ++ " by L-SuccSucc { " ++ formatDerivation p ++ " }"
+instance F.FormatDerivation Derivation where
+  format = \case
+    LZero j -> F.formatBy "L-Zero" j []
+    LSuccSucc j p -> F.formatBy "L-SuccSucc" j [F.MkDerivation p]

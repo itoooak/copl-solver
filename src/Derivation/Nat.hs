@@ -1,6 +1,7 @@
 module Derivation.Nat where
 
 import Common.Syntax (Nat (..), NatJudgment (..), mulNat)
+import Derivation.Format qualified as F
 
 data Derivation
   = PZero NatJudgment
@@ -21,13 +22,9 @@ derive = \case
     n3 = mulNat n1 n2
   _ -> Nothing
 
-formatDerivation :: Derivation -> String
-formatDerivation = \case
-  PZero j ->
-    show j ++ " by P-Zero {}"
-  PSucc j p ->
-    show j ++ " by P-Succ { " ++ formatDerivation p ++ " }"
-  TZero j ->
-    show j ++ " by T-Zero {}"
-  TSucc j p1 p2 ->
-    show j ++ " by T-Succ { " ++ formatDerivation p1 ++ "; " ++ formatDerivation p2 ++ " }"
+instance F.FormatDerivation Derivation where
+  format = \case
+    PZero j -> F.formatBy "P-Zero" j []
+    PSucc j p -> F.formatBy "P-Succ" j [F.MkDerivation p]
+    TZero j -> F.formatBy "T-Zero" j []
+    TSucc j p1 p2 -> F.formatBy "T-Succ" j [F.MkDerivation p1, F.MkDerivation p2]

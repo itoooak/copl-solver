@@ -18,26 +18,26 @@ main :: IO ()
 main = do
   args <- getArgs
   case args of
-    ["Nat"] -> execute natJudgmentP Nat.derive Nat.formatDerivation
-    ["CompareNat1"] -> execute CompareNatCommon.judgmentP CompareNat1.derive CompareNat1.formatDerivation
-    ["CompareNat2"] -> execute CompareNatCommon.judgmentP CompareNat2.derive CompareNat2.formatDerivation
-    ["CompareNat3"] -> execute CompareNatCommon.judgmentP CompareNat3.derive CompareNat3.formatDerivation
-    ["EvalNatExp"] -> execute EvalNatExp.evalJudgmentP EvalNatExp.derive EvalNatExp.formatDerivation
-    ["ReduceNatExp"] -> execute ReduceNatExp.reduceJudgmentP ReduceNatExp.derive ReduceNatExp.formatDerivation
-    ["EvalML1"] -> execute EvalML1.evalJudgmentP EvalML1.evalDerive EvalML1.formatEvalDerivation
-    ["EvalML1Err"] -> execute EvalML1Err.evalJudgmentP EvalML1Err.evalDerive format
+    ["Nat"] -> execute natJudgmentP Nat.derive
+    ["CompareNat1"] -> execute CompareNatCommon.judgmentP CompareNat1.derive
+    ["CompareNat2"] -> execute CompareNatCommon.judgmentP CompareNat2.derive
+    ["CompareNat3"] -> execute CompareNatCommon.judgmentP CompareNat3.derive
+    ["EvalNatExp"] -> execute EvalNatExp.evalJudgmentP EvalNatExp.derive
+    ["ReduceNatExp"] -> execute ReduceNatExp.reduceJudgmentP ReduceNatExp.derive
+    ["EvalML1"] -> execute EvalML1.evalJudgmentP EvalML1.evalDerive
+    ["EvalML1Err"] -> execute EvalML1Err.evalJudgmentP EvalML1Err.evalDerive
     _ -> die "System name is not provided."
 
 execute ::
+  (FormatDerivation derivation) =>
   (Parser judgment) ->
   (judgment -> Maybe derivation) ->
-  (derivation -> String) ->
   IO ()
-execute parser deriver formatter = do
+execute parser deriver = do
   input <- getContents
   case parseAll parser input of
     Left err -> die $ "Parse Error:\n" ++ show err
     Right judgment ->
       case deriver judgment of
         Nothing -> die "Error: No valid derivation found for the given judgment."
-        Just derivation -> putStr (formatter derivation)
+        Just derivation -> putStr (format derivation)

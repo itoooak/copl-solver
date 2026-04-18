@@ -3,6 +3,7 @@ module Derivation.ReduceNatExp where
 import Common.Parser (Parser, exprP, symbol)
 import Common.Syntax (Expr (..), NatJudgment (..), reduceExpr)
 import Control.Applicative ((<|>))
+import Derivation.Format qualified as F
 import Derivation.Nat qualified as DNat
 
 data ReduceJudgment
@@ -90,35 +91,20 @@ derive = \case
     e3 = reduceExpr e1
   _ -> Nothing
 
-formatDerivation :: Derivation -> String
-formatDerivation = \case
-  RPlus j np ->
-    show j ++ " by R-Plus { " ++ DNat.formatDerivation np ++ " }"
-  RTimes j np ->
-    show j ++ " by R-Times { " ++ DNat.formatDerivation np ++ " }"
-  RPlusL j p ->
-    show j ++ " by R-PlusL { " ++ formatDerivation p ++ " }"
-  RPlusR j p ->
-    show j ++ " by R-PlusR { " ++ formatDerivation p ++ " }"
-  RTimesL j p ->
-    show j ++ " by R-TimesL { " ++ formatDerivation p ++ " }"
-  RTimesR j p ->
-    show j ++ " by R-TimesR { " ++ formatDerivation p ++ " }"
-  DRPlus j np ->
-    show j ++ " by DR-Plus { " ++ DNat.formatDerivation np ++ " }"
-  DRTimes j np ->
-    show j ++ " by DR-Times { " ++ DNat.formatDerivation np ++ " }"
-  DRPlusL j p ->
-    show j ++ " by DR-PlusL { " ++ formatDerivation p ++ " }"
-  DRPlusR j p ->
-    show j ++ " by DR-PlusR { " ++ formatDerivation p ++ " }"
-  DRTimesL j p ->
-    show j ++ " by DR-TimesL { " ++ formatDerivation p ++ " }"
-  DRTimesR j p ->
-    show j ++ " by DR-TimesR { " ++ formatDerivation p ++ " }"
-  MRZero j ->
-    show j ++ " by MR-Zero {}"
-  MRMulti j p1 p2 ->
-    show j ++ " by MR-Multi { " ++ formatDerivation p1 ++ "; " ++ formatDerivation p2 ++ " }"
-  MROne j p ->
-    show j ++ " by MR-One { " ++ formatDerivation p ++ " }"
+instance F.FormatDerivation Derivation where
+  format = \case
+    RPlus j np -> F.formatBy "R-Plus" j [F.MkDerivation np]
+    RTimes j np -> F.formatBy "R-Times" j [F.MkDerivation np]
+    RPlusL j p -> F.formatBy "R-PlusL" j [F.MkDerivation p]
+    RPlusR j p -> F.formatBy "R-PlusR" j [F.MkDerivation p]
+    RTimesL j p -> F.formatBy "R-TimesL" j [F.MkDerivation p]
+    RTimesR j p -> F.formatBy "R-TimesR" j [F.MkDerivation p]
+    DRPlus j np -> F.formatBy "DR-Plus" j [F.MkDerivation np]
+    DRTimes j np -> F.formatBy "DR-Times" j [F.MkDerivation np]
+    DRPlusL j p -> F.formatBy "DR-PlusL" j [F.MkDerivation p]
+    DRPlusR j p -> F.formatBy "DR-PlusR" j [F.MkDerivation p]
+    DRTimesL j p -> F.formatBy "DR-TimesL" j [F.MkDerivation p]
+    DRTimesR j p -> F.formatBy "DR-TimesR" j [F.MkDerivation p]
+    MRZero j -> F.formatBy "MR-Zero" j []
+    MRMulti j p1 p2 -> F.formatBy "MR-Multi" j [F.MkDerivation p1, F.MkDerivation p2]
+    MROne j p -> F.formatBy "MR-One" j [F.MkDerivation p]
