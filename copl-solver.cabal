@@ -25,7 +25,9 @@ library
         Derivation.ReduceNatExp,
         Derivation.EvalML1.Shared,
         Derivation.EvalML1,
-        Derivation.EvalML1Err
+        Derivation.EvalML1Err,
+        Derivation.EvalML2.Shared,
+        Derivation.EvalML2
     other-modules:
     build-depends:    parser-combinators, megaparsec, base ^>=4.20.2.0
     hs-source-dirs:   src

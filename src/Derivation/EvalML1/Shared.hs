@@ -9,6 +9,7 @@ import Text.Megaparsec.Char.Lexer qualified as L
 data Value
   = Int Int
   | Bool Bool
+  deriving (Eq)
 
 instance Show Value where
   show (Int i) = show i
@@ -30,13 +31,7 @@ data Exp
 
 instance Show Exp where
   show (Value v) = show v
-  show (Op op e1 e2) = "(" ++ show e1 ++ opStr ++ show e2 ++ ")"
-   where
-    opStr = case op of
-      Add -> "+"
-      Sub -> "-"
-      Mult -> "*"
-      Lt -> "<"
+  show (Op op e1 e2) = "(" ++ show e1 ++ show op ++ show e2 ++ ")"
   show (If e1 e2 e3) =
     "if " ++ show e1 ++ " then " ++ show e2 ++ " else " ++ show e3
 
@@ -59,6 +54,13 @@ evalExp (If e1 e2 e3) = do
     _ -> Nothing
 
 data Prim = Add | Sub | Mult | Lt
+
+instance Show Prim where
+  show = \case
+    Add -> "+"
+    Sub -> "-"
+    Mult -> "*"
+    Lt -> "<"
 
 ifP :: Parser Exp
 ifP = do
