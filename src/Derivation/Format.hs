@@ -13,7 +13,8 @@ formatBy rule j ps =
   show j
     ++ " by "
     ++ rule
-    ++ " "
     ++ case map (\(MkDerivation p) -> format p) ps of
-      [] -> "{}"
-      xs -> "{ " ++ intercalate "; " xs ++ " }"
+      [] -> " {}"
+      xs -> " {\n" ++ intercalate ";\n" (map (indent 2) xs) ++ "\n}"
+ where
+  indent n s = intercalate "\n" $ map (replicate n ' ' ++) (lines s)
