@@ -8,6 +8,7 @@ import Derivation.CompareNat.System3 qualified as CompareNat3
 import Derivation.EvalML1 qualified as EvalML1
 import Derivation.EvalML1Err qualified as EvalML1Err
 import Derivation.EvalML2 qualified as EvalML2
+import Derivation.EvalML3 qualified as EvalML3
 import Derivation.EvalNatExp qualified as EvalNatExp
 import Derivation.Format (FormatDerivation (format))
 import Derivation.Nat.Shared (judgmentP)
@@ -29,10 +30,12 @@ main = do
     ["EvalML1"] -> execute EvalML1.evalJudgmentP EvalML1.evalDerive
     ["EvalML1Err"] -> execute EvalML1Err.evalJudgmentP EvalML1Err.evalDerive
     ["EvalML2"] -> execute EvalML2.evalJudgmentP EvalML2.evalDerive
+    ["EvalML3"] -> execute EvalML3.evalJudgmentP EvalML3.evalDerive
     _ -> die "System name is not provided."
 
 execute ::
   (FormatDerivation derivation) =>
+  (Show judgment) =>
   (Parser judgment) ->
   (judgment -> Maybe derivation) ->
   IO ()

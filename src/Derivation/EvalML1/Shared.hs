@@ -53,7 +53,7 @@ evalExp (If e1 e2 e3) = do
     Bool False -> evalExp e3
     _ -> Nothing
 
-data Prim = Add | Sub | Mult | Lt
+data Prim = Add | Sub | Mult | Lt deriving (Eq)
 
 instance Show Prim where
   show = \case
