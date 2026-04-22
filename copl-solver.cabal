@@ -31,7 +31,9 @@ library
         Derivation.EvalML3.Shared,
         Derivation.EvalML3,
         Derivation.NamelessML3,
-        Derivation.EvalNamelessML3
+        Derivation.EvalNamelessML3,
+        Derivation.EvalML4.Shared,
+        Derivation.EvalML4
     other-modules:
     build-depends:    parser-combinators, megaparsec, base ^>=4.20.2.0
     hs-source-dirs:   src

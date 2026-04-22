@@ -9,10 +9,11 @@ import Derivation.EvalML1 qualified as EvalML1
 import Derivation.EvalML1Err qualified as EvalML1Err
 import Derivation.EvalML2 qualified as EvalML2
 import Derivation.EvalML3 qualified as EvalML3
+import Derivation.EvalML4 qualified as EvalML4
+import Derivation.EvalNamelessML3 qualified as EvalNamelessML3
 import Derivation.EvalNatExp qualified as EvalNatExp
 import Derivation.Format (FormatDerivation (format))
 import Derivation.NamelessML3 qualified as NamelessML3
-import Derivation.EvalNamelessML3 qualified as EvalNamelessML3
 import Derivation.Nat.Shared (judgmentP)
 import Derivation.Nat.System qualified as Nat
 import Derivation.ReduceNatExp qualified as ReduceNatExp
@@ -35,6 +36,7 @@ main = do
     ["EvalML3"] -> execute EvalML3.evalJudgmentP EvalML3.evalDerive
     ["NamelessML3"] -> execute NamelessML3.translateJudgmentP NamelessML3.translateDerive
     ["EvalNamelessML3"] -> execute EvalNamelessML3.evalJudgmentP EvalNamelessML3.evalDerive
+    ["EvalML4"] -> execute EvalML4.evalJudgmentP EvalML4.evalDerive
     _ -> die "System name is not provided."
 
 execute ::
