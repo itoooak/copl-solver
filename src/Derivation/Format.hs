@@ -1,5 +1,6 @@
 module Derivation.Format where
 
+import Data.Char (isSpace)
 import Data.List (intercalate)
 
 data AnyDerivation
@@ -10,7 +11,7 @@ class FormatDerivation a where
 
 formatBy :: (Show j) => String -> j -> [AnyDerivation] -> String
 formatBy rule j ps =
-  show j
+  dropWhile isSpace (show j)
     ++ " by "
     ++ rule
     ++ case map (\(MkDerivation p) -> format p) ps of
