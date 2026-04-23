@@ -153,6 +153,7 @@ evalExp (Match e en x y ec) env@(Env l) = do
     Cons v1 v2 -> evalExp ec (Env ((y, v2) : (x, v1) : l))
     _ -> Nothing
 
+-- FIXME: expとしての`::`、valueとしての`::`
 appExpP :: Parser Exp
 appExpP = do
   first <- base
@@ -160,9 +161,13 @@ appExpP = do
   return $ foldl App first rest
  where
   base =
-    (Value <$> valueP)
-      <|> (Var <$> varP)
+    (Var <$> varP)
       <|> between (symbol "(") (symbol ")") expP
+      <|> try (Value . Int <$> lexeme (L.signed (return ()) L.decimal))
+      <|> (Value (Bool True) <$ symbol "true")
+      <|> (Value (Bool False) <$ symbol "false")
+      <|> (Value Nil <$ symbol "[]")
+      <|> try (Value <$> valueP)
 
 binopExpP :: Parser Exp
 binopExpP = makeExprParser appExpP table

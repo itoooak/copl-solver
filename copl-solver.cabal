@@ -34,9 +34,10 @@ library
         Derivation.EvalNamelessML3,
         Derivation.EvalML4.Shared,
         Derivation.EvalML4,
-        Derivation.TypingML4
+        Derivation.TypingML4,
+        Derivation.PolyTypingML4
     other-modules:
-    build-depends:    mtl, parser-combinators, megaparsec, base ^>=4.20.2.0
+    build-depends:    containers, mtl, parser-combinators, megaparsec, base ^>=4.20.2.0
     hs-source-dirs:   src
     default-language: GHC2024
 
