@@ -5,6 +5,8 @@ import Derivation.CompareNat.Shared qualified as CompareNat
 import Derivation.CompareNat.System1 qualified as CompareNat1
 import Derivation.CompareNat.System2 qualified as CompareNat2
 import Derivation.CompareNat.System3 qualified as CompareNat3
+import Derivation.EvalContML1 qualified as EvalContML1
+import Derivation.EvalContML4 qualified as EvalContML4
 import Derivation.EvalML1 qualified as EvalML1
 import Derivation.EvalML1Err qualified as EvalML1Err
 import Derivation.EvalML2 qualified as EvalML2
@@ -41,6 +43,8 @@ main = do
     ["EvalML4"] -> execute EvalML4.evalJudgmentP EvalML4.evalDerive
     ["TypingML4"] -> execute TypingML4.typingJudgmentP TypingML4.typingDerive
     ["PolyTypingML4"] -> execute PolyTypingML4.typingJudgmentP PolyTypingML4.typingDerive
+    ["EvalContML1"] -> execute EvalContML1.evalJudgmentP EvalContML1.evalDerive
+    ["EvalContML4"] -> execute EvalContML4.evalJudgmentP EvalContML4.evalDerive
     -- TODO: EvalML5
     _ -> die "System name is not provided."
 
