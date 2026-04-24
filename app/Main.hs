@@ -14,6 +14,7 @@ import Derivation.EvalML3 qualified as EvalML3
 import Derivation.EvalML4 qualified as EvalML4
 import Derivation.EvalNamelessML3 qualified as EvalNamelessML3
 import Derivation.EvalNatExp qualified as EvalNatExp
+import Derivation.EvalRefML3 qualified as EvalRefML3
 import Derivation.Format (FormatDerivation (format))
 import Derivation.NamelessML3 qualified as NamelessML3
 import Derivation.Nat.Shared (judgmentP)
@@ -45,6 +46,7 @@ main = do
     ["PolyTypingML4"] -> execute PolyTypingML4.typingJudgmentP PolyTypingML4.typingDerive
     ["EvalContML1"] -> execute EvalContML1.evalJudgmentP EvalContML1.evalDerive
     ["EvalContML4"] -> execute EvalContML4.evalJudgmentP EvalContML4.evalDerive
+    ["EvalRefML3"] -> execute EvalRefML3.evalJudgmentP EvalRefML3.evalDerive
     -- TODO: EvalML5
     _ -> die "System name is not provided."
 
