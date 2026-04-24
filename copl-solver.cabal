@@ -39,7 +39,8 @@ library
         Derivation.EvalContML1,
         Derivation.EvalContML4.Shared,
         Derivation.EvalContML4,
-        Derivation.EvalRefML3
+        Derivation.EvalRefML3,
+        Derivation.While
     other-modules:
     build-depends:    containers, mtl, parser-combinators, megaparsec, base ^>=4.20.2.0
     hs-source-dirs:   src

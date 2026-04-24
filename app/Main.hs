@@ -22,6 +22,7 @@ import Derivation.Nat.System qualified as Nat
 import Derivation.PolyTypingML4 qualified as PolyTypingML4
 import Derivation.ReduceNatExp qualified as ReduceNatExp
 import Derivation.TypingML4 qualified as TypingML4
+import Derivation.While qualified as While
 import System.Environment (getArgs)
 import System.Exit (die)
 
@@ -47,6 +48,7 @@ main = do
     ["EvalContML1"] -> execute EvalContML1.evalJudgmentP EvalContML1.evalDerive
     ["EvalContML4"] -> execute EvalContML4.evalJudgmentP EvalContML4.evalDerive
     ["EvalRefML3"] -> execute EvalRefML3.evalJudgmentP EvalRefML3.evalDerive
+    ["While"] -> execute While.changesJudgmentP While.changesDerive
     -- TODO: EvalML5
     _ -> die "System name is not provided."
 
