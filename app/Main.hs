@@ -12,6 +12,7 @@ import Derivation.EvalML1Err qualified as EvalML1Err
 import Derivation.EvalML2 qualified as EvalML2
 import Derivation.EvalML3 qualified as EvalML3
 import Derivation.EvalML4 qualified as EvalML4
+import Derivation.EvalML5 qualified as EvalML5
 import Derivation.EvalNamelessML3 qualified as EvalNamelessML3
 import Derivation.EvalNatExp qualified as EvalNatExp
 import Derivation.EvalRefML3 qualified as EvalRefML3
@@ -49,7 +50,7 @@ main = do
     ["EvalContML4"] -> execute EvalContML4.evalJudgmentP EvalContML4.evalDerive
     ["EvalRefML3"] -> execute EvalRefML3.evalJudgmentP EvalRefML3.evalDerive
     ["While"] -> execute While.changesJudgmentP While.changesDerive
-    -- TODO: EvalML5
+    ["EvalML5"] -> execute EvalML5.evalJudgmentP EvalML5.evalDerive
     _ -> die "System name is not provided."
 
 execute ::
