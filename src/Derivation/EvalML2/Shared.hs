@@ -1,13 +1,11 @@
 module Derivation.EvalML2.Shared where
 
-import Common.Parser (Parser, lexeme, symbol)
+import Common.Parser (Parser, mkAssocP, mkIfP, mkLetP, mkVarP, symbol)
 import Control.Applicative ((<|>))
 import Control.Applicative.Combinators (between)
 import Control.Monad.Combinators.Expr (Operator (InfixL), makeExprParser)
 import Data.List (intercalate)
 import Derivation.EvalML1.Shared (Prim (..), Value (..), valueP)
-import Text.Megaparsec (many, sepBy)
-import Text.Megaparsec.Char (alphaNumChar, char, letterChar)
 
 data Env = Env [(String, Value)]
 
@@ -15,15 +13,8 @@ instance Show Env where
   show (Env l) =
     intercalate ", " $ map (\(x, e) -> x ++ " = " ++ show e) $ reverse l
 
-assignmentP :: Parser (String, Value)
-assignmentP = do
-  name <- varP
-  _ <- symbol "="
-  value <- valueP
-  return (name, value)
-
 envP :: Parser Env
-envP = Env <$> reverse <$> assignmentP `sepBy` symbol ","
+envP = mkAssocP Env varP "=" valueP
 
 data Exp
   = Value Value
@@ -64,27 +55,13 @@ evalExp (Let x e1 e2) env@(Env l) = do
   evalExp e2 $ Env ((x, v1) : l)
 
 ifP :: Parser Exp
-ifP = do
-  _ <- symbol "if"
-  e1 <- expP
-  _ <- symbol "then"
-  e2 <- expP
-  _ <- symbol "else"
-  e3 <- expP
-  return $ If e1 e2 e3
+ifP = mkIfP If expP expP
 
 varP :: Parser String
-varP = lexeme $ (:) <$> letterChar <*> many (alphaNumChar <|> char '_')
+varP = mkVarP ['_'] []
 
 letP :: Parser Exp
-letP = do
-  _ <- symbol "let"
-  x <- varP
-  _ <- symbol "="
-  e1 <- expP
-  _ <- symbol "in"
-  e2 <- expP
-  return $ Let x e1 e2
+letP = mkLetP Let varP expP
 
 expP :: Parser Exp
 expP = makeExprParser atom table

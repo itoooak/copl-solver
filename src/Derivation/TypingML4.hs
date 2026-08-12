@@ -1,13 +1,13 @@
 module Derivation.TypingML4 where
 
-import Common.Parser (Parser, symbol)
+import Common.Parser (Parser, mkAssocP, symbol)
 import Control.Monad.Combinators.Expr (Operator (..), makeExprParser)
 import Control.Monad.State (MonadState (..), MonadTrans (lift), StateT (runStateT), gets, modify)
 import Data.List (intercalate)
 import Derivation.EvalML1.Shared (Prim (..))
 import Derivation.EvalML4.Shared (Exp (..), Value (..), expP, varP)
 import Derivation.Format qualified as F
-import Text.Megaparsec (between, optional, sepBy, (<|>))
+import Text.Megaparsec (between, optional, (<|>))
 
 data Ty
   = TyBool
@@ -50,13 +50,7 @@ instance Show TyEnv where
     intercalate ", " $ map (\(x, v) -> x ++ " : " ++ show v) $ reverse l
 
 tyEnvP :: Parser TyEnv
-tyEnvP = TyEnv <$> reverse <$> assignmentP `sepBy` symbol ","
- where
-  assignmentP = do
-    name <- varP
-    _ <- symbol ":"
-    t <- tyP
-    return (name, t)
+tyEnvP = mkAssocP TyEnv varP ":" tyP
 
 data TypingJudgment
   = HasType TyEnv Exp Ty

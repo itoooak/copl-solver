@@ -1,10 +1,9 @@
 module Derivation.EvalML1.Shared where
 
-import Common.Parser (Parser, lexeme, sc, symbol)
+import Common.Parser (Parser, intP, mkIfP, symbol)
 import Control.Applicative ((<|>))
 import Control.Applicative.Combinators (between)
 import Control.Monad.Combinators.Expr (Operator (InfixL), makeExprParser)
-import Text.Megaparsec.Char.Lexer qualified as L
 
 data Value
   = Int Int
@@ -21,8 +20,6 @@ valueP =
   (Int <$> intP)
     <|> (Bool True <$ symbol "true")
     <|> (Bool False <$ symbol "false")
- where
-  intP = lexeme $ L.signed sc L.decimal
 
 data Exp
   = Value Value
@@ -63,14 +60,7 @@ instance Show Prim where
     Lt -> "<"
 
 ifP :: Parser Exp
-ifP = do
-  _ <- symbol "if"
-  e1 <- expP
-  _ <- symbol "then"
-  e2 <- expP
-  _ <- symbol "else"
-  e3 <- expP
-  return $ If e1 e2 e3
+ifP = mkIfP If expP expP
 
 expP :: Parser Exp
 expP = makeExprParser atom table

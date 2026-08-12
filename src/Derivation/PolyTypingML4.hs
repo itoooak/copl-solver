@@ -1,6 +1,6 @@
 module Derivation.PolyTypingML4 where
 
-import Common.Parser (Parser, lexeme, symbol)
+import Common.Parser (Parser, lexeme, mkAssocP, symbol)
 import Control.Monad.Combinators.Expr (Operator (..), makeExprParser)
 import Control.Monad.State (MonadState (..), MonadTrans (lift), StateT (runStateT), gets, modify)
 import Data.Char (chr, ord)
@@ -93,13 +93,7 @@ instance Show TyEnv where
     intercalate ", " $ map (\(x, v) -> x ++ " : " ++ show v) $ reverse l
 
 tyEnvP :: Parser TyEnv
-tyEnvP = TyEnv <$> reverse <$> assignmentP `sepBy` symbol ","
- where
-  assignmentP = do
-    name <- varP
-    _ <- symbol ":"
-    t <- tyscP
-    return (name, t)
+tyEnvP = mkAssocP TyEnv varP ":" tyscP
 
 data TypingJudgment
   = HasType TyEnv Exp Ty

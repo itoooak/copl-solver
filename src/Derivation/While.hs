@@ -1,36 +1,22 @@
 module Derivation.While where
 
-import Common.Parser (Parser, lexeme, symbol)
+import Common.Parser (Parser, intP, mkAssocP, mkIfP, mkVarP, symbol)
 import Control.Monad (guard)
 import Control.Monad.Combinators.Expr (Operator (..), makeExprParser)
 import Data.List (intercalate)
 import Derivation.Format qualified as F
-import Text.Megaparsec (MonadParsec (..), between, many, sepBy, (<|>))
-import Text.Megaparsec.Char (alphaNumChar, char, letterChar)
-import Text.Megaparsec.Char.Lexer qualified as L
+import Text.Megaparsec (MonadParsec (..), between, (<|>))
 
 type Store = [(String, Int)]
 
 varP :: Parser String
-varP = lexeme $ try $ do
-  name <- lexeme $ (:) <$> letterChar <*> many (alphaNumChar <|> char '_')
-  if name `elem` reservedWords
-    then fail $ "reserved word `" ++ name ++ "` cannot be a variable"
-    else return name
+varP = mkVarP extraChars reservedWords
  where
+  extraChars = ['_']
   reservedWords = ["true", "false", "if", "then", "else", "evalto", "while", "do"]
 
-intP :: Parser Int
-intP = lexeme $ L.signed (return ()) L.decimal
-
 storeP :: Parser Store
-storeP = reverse <$> assignmentP `sepBy` symbol ","
- where
-  assignmentP = do
-    x <- varP
-    _ <- symbol "="
-    i <- intP
-    return (x, i)
+storeP = mkAssocP id varP "=" intP
 
 updated :: Store -> String -> Int -> Store
 updated [] _ _ = undefined
@@ -103,7 +89,7 @@ bexpP = makeExprParser base table
  where
   base =
     (Bool True <$ symbol "true")
-      <|> (Bool True <$ symbol "true")
+      <|> (Bool False <$ symbol "false")
       <|> (Neg <$ symbol "!" *> base)
       <|> try compP
       <|> between (symbol "(") (symbol ")") bexpP
@@ -179,14 +165,7 @@ comP = makeExprParser base [[InfixL (Seq <$ symbol ";")]]
     _ <- symbol ":="
     a <- aexpP
     return $ Assign x a
-  ifP = do
-    _ <- symbol "if"
-    b <- bexpP
-    _ <- symbol "then"
-    c1 <- comP
-    _ <- symbol "else"
-    c2 <- comP
-    return $ If b c1 c2
+  ifP = mkIfP If bexpP comP
   whileP = do
     _ <- symbol "while"
     b <- between (symbol "(") (symbol ")") bexpP

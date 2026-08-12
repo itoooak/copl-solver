@@ -1,6 +1,6 @@
 module Derivation.EvalRefML3 where
 
-import Common.Parser (Parser, lexeme, symbol)
+import Common.Parser (Parser, intP, lexeme, minusP, mkAppExpP, mkAssocP, mkClosureP, mkFunP, mkIfP, mkLetP, mkLetrecP, mkRecClosureP, mkVarP, symbol)
 import Control.Monad (guard)
 import Control.Monad.Combinators.Expr (Operator (..), makeExprParser)
 import Data.List (intercalate)
@@ -8,10 +8,8 @@ import Data.Maybe (fromMaybe)
 import Derivation.EvalML1 (BinopDerivation, BinopJudgment (..), binopDerive)
 import Derivation.EvalML1.Shared (Prim (..))
 import Derivation.Format qualified as F
-import Text.Megaparsec (MonadParsec (..), between, many, optional, sepBy, (<|>))
-import Text.Megaparsec.Byte (string)
-import Text.Megaparsec.Char (alphaNumChar, char, letterChar)
-import Text.Megaparsec.Char.Lexer qualified as L
+import Text.Megaparsec (MonadParsec (..), between, optional, (<|>))
+import Text.Megaparsec.Char (char)
 
 data Env = Env [(String, Value)] deriving (Eq)
 
@@ -20,22 +18,13 @@ instance Show Env where
     intercalate ", " $ map (\(x, v) -> x ++ " = " ++ show v) $ reverse l
 
 varP :: Parser String
-varP = lexeme $ try $ do
-  name <- lexeme $ (:) <$> letterChar <*> many (alphaNumChar <|> char '_')
-  if name `elem` reservedWords
-    then fail $ "reserved word `" ++ name ++ "` cannot be a variable"
-    else return name
+varP = mkVarP extraChars reservedWords
  where
+  extraChars = ['_']
   reservedWords = ["let", "rec", "in", "fun", "if", "then", "else", "evalto", "ref"]
 
 envP :: Parser Env
-envP = Env <$> reverse <$> assignmentP `sepBy` symbol ","
- where
-  assignmentP = do
-    name <- varP
-    _ <- symbol "="
-    value <- valueP
-    return (name, value)
+envP = mkAssocP Env varP "=" valueP
 
 data Store = Store [(String, Value)] deriving (Eq)
 
@@ -58,14 +47,7 @@ locP = lexeme $ try $ do
   return name
 
 storeP :: Parser Store
-storeP = Store <$> reverse <$> assignmentP `sepBy` symbol ","
- where
-  assignmentP = do
-    _ <- char '@'
-    name <- varP
-    _ <- symbol "="
-    value <- valueP
-    return (name, value)
+storeP = mkAssocP Store locP "=" valueP
 
 data Value
   = Int Int
@@ -90,25 +72,8 @@ valueP =
     <|> (Bool True <$ symbol "true")
     <|> (Bool False <$ symbol "false")
     <|> (Loc <$> try locP)
-    <|> try funValP
-    <|> try recfunValP
- where
-  intP = lexeme $ L.signed (return ()) L.decimal
-  funValP = do
-    env <- between (symbol "(") (symbol ")") envP
-    ExpFun x e <- between (symbol "[") (symbol "]") funP
-    return $ Fun env x e
-  recfunValP = do
-    env <- between (symbol "(") (symbol ")") envP
-    (x, ExpFun y e) <- between (symbol "[") (symbol "]") recdefP
-    return $ Rec env x y e
-   where
-    recdefP = do
-      _ <- symbol "rec"
-      x <- varP
-      _ <- symbol "="
-      e <- funP
-      return (x, e)
+    <|> try (mkClosureP Fun envP varP expP)
+    <|> try (mkRecClosureP Rec envP varP expP)
 
 data Exp
   = Value Value
@@ -141,10 +106,7 @@ instance Show Exp where
   show (Assign e1 e2) = show e1 ++ " := " ++ show e2
 
 appExpP :: Parser Exp
-appExpP = do
-  first <- base
-  rest <- many base
-  return $ foldl App first rest
+appExpP = mkAppExpP App base
  where
   base =
     (Value <$> valueP)
@@ -165,50 +127,18 @@ binopExpP = makeExprParser appExpP table
     , [InfixL (Op Lt <$ symbol "<")]
     , [InfixR (Assign <$ symbol ":=")]
     ]
-  minusP = lexeme $ try $ do
-    res <- string "-"
-    notFollowedBy (char '>')
-    return res
 
 ifP :: Parser Exp
-ifP = do
-  _ <- symbol "if"
-  e1 <- expP
-  _ <- symbol "then"
-  e2 <- expP
-  _ <- symbol "else"
-  e3 <- expP
-  return $ If e1 e2 e3
-
-letrecP :: Parser Exp
-letrecP = do
-  _ <- symbol "let" *> symbol "rec"
-  f <- varP
-  _ <- symbol "=" *> symbol "fun"
-  x <- varP
-  _ <- symbol "->"
-  body <- expP
-  _ <- symbol "in"
-  rest <- expP
-  return $ LetRec f x body rest
+ifP = mkIfP If expP expP
 
 letP :: Parser Exp
-letP = do
-  _ <- symbol "let"
-  x <- varP
-  _ <- symbol "="
-  e1 <- expP
-  _ <- symbol "in"
-  e2 <- expP
-  return $ Let x e1 e2
+letP = mkLetP Let varP expP
+
+letrecP :: Parser Exp
+letrecP = mkLetrecP LetRec varP expP
 
 funP :: Parser Exp
-funP = do
-  _ <- symbol "fun"
-  x <- varP
-  _ <- symbol "->"
-  e <- expP
-  return $ ExpFun x e
+funP = mkFunP ExpFun varP expP
 
 expP :: Parser Exp
 expP =

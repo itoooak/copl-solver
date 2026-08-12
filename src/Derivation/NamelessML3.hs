@@ -1,15 +1,14 @@
 module Derivation.NamelessML3 where
 
-import Common.Parser (Parser, lexeme, symbol)
+import Common.Parser (Parser, intP, lexeme, minusP, mkAppExpP, mkClosureP, mkFunP, mkIfP, mkLetP, mkLetrecP, mkRecClosureP, symbol)
 import Control.Monad (guard)
 import Control.Monad.Combinators.Expr (Operator (InfixL), makeExprParser)
-import Data.Foldable (traverse_)
 import Data.List (elemIndex, intercalate)
 import Derivation.EvalML1.Shared (Prim (..))
 import Derivation.EvalML3.Shared (Exp (..), Value (..), expP, varP)
 import Derivation.Format qualified as F
-import Text.Megaparsec (MonadParsec (notFollowedBy, try), between, many, sepBy, (<|>))
-import Text.Megaparsec.Char (char, string)
+import Text.Megaparsec (MonadParsec (try), between, sepBy, (<|>))
+import Text.Megaparsec.Char (char)
 import Text.Megaparsec.Char.Lexer qualified as L
 
 data VarList = VarList [String]
@@ -40,23 +39,8 @@ dbValueP =
   (DBVInt <$> try intP)
     <|> (DBVBool True <$ symbol "true")
     <|> (DBVBool False <$ symbol "false")
-    <|> try dbFunValP
-    <|> try dbRecfunValP
- where
-  intP = lexeme $ L.signed (return ()) L.decimal
-  dbFunValP = do
-    vl <- between (symbol "(") (symbol ")") dbValueListP
-    DBEFun e <- between (symbol "[") (symbol "]") dbFunP
-    return $ DBVFun vl e
-  dbRecfunValP = do
-    vl <- between (symbol "(") (symbol ")") dbValueListP
-    DBEFun e <- between (symbol "[") (symbol "]") recdefP
-    return $ DBVRec vl e
-   where
-    recdefP = do
-      traverse_ symbol ["rec", ".", "="]
-      e <- dbFunP
-      return e
+    <|> try (mkClosureP (\vl _ e -> DBVFun vl e) dbValueListP (symbol ".") dbExpP)
+    <|> try (mkRecClosureP (\vl _ _ e -> DBVRec vl e) dbValueListP (symbol ".") dbExpP)
 
 instance Show DBValue where
   show (DBVInt i) = show i
@@ -91,10 +75,7 @@ instance Show DBExp where
     "let rec . = fun . -> " ++ show e1 ++ " in " ++ show e2
 
 dbAppExpP :: Parser DBExp
-dbAppExpP = do
-  first <- base
-  rest <- many base
-  return $ foldl DBEApp first rest
+dbAppExpP = mkAppExpP DBEApp base
  where
   base =
     (DBEValue <$> dbValueP)
@@ -113,42 +94,18 @@ dbBinopExpP = makeExprParser dbAppExpP table
       ]
     , [InfixL (DBEOp Lt <$ symbol "<")]
     ]
-  minusP = lexeme $ try $ do
-    res <- string "-"
-    notFollowedBy (char '>')
-    return res
 
 dbIfP :: Parser DBExp
-dbIfP = do
-  _ <- symbol "if"
-  e1 <- dbBinopExpP
-  _ <- symbol "then"
-  e2 <- dbBinopExpP
-  _ <- symbol "else"
-  e3 <- dbBinopExpP
-  return $ DBEIf e1 e2 e3
-
-dbLetrecP :: Parser DBExp
-dbLetrecP = do
-  traverse_ symbol ["let", "rec", ".", "=", "fun", ".", "->"]
-  body <- dbExpP
-  _ <- symbol "in"
-  rest <- dbExpP
-  return $ DBERec body rest
+dbIfP = mkIfP DBEIf dbBinopExpP dbBinopExpP
 
 dbLetP :: Parser DBExp
-dbLetP = do
-  traverse_ symbol ["let", ".", "="]
-  e1 <- dbExpP
-  _ <- symbol "in"
-  e2 <- dbExpP
-  return $ DBELet e1 e2
+dbLetP = mkLetP (\_ e1 e2 -> DBELet e1 e2) (symbol ".") dbExpP
+
+dbLetrecP :: Parser DBExp
+dbLetrecP = mkLetrecP (\_ _ e1 e2 -> DBERec e1 e2) (symbol ".") dbExpP
 
 dbFunP :: Parser DBExp
-dbFunP = do
-  traverse_ symbol ["fun", ".", "->"]
-  e <- dbExpP
-  return $ DBEFun e
+dbFunP = mkFunP (\_ e -> DBEFun e) (symbol ".") dbExpP
 
 dbExpP :: Parser DBExp
 dbExpP =
@@ -191,7 +148,6 @@ data TranslateDerivation
 
 translateDerive :: TranslateJudgment -> Maybe TranslateDerivation
 translateDerive = \case
-  -- translateDerive jd = trace (show jd) $ case jd of
   j@(TranslateTo _ (Value (Int i1)) (DBEValue (DBVInt i2))) | i1 == i2 -> Just $ TrInt j
   j@(TranslateTo _ (Value (Bool b1)) (DBEValue (DBVBool b2))) | b1 == b2 -> Just $ TrBool j
   j@(TranslateTo vl (If e1 e2 e3) (DBEIf d1 d2 d3)) ->
