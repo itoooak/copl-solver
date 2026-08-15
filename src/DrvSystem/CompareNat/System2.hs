@@ -1,17 +1,17 @@
-module Derivation.CompareNat.System2 where
+module DrvSystem.CompareNat.System2 where
 
-import Derivation.CompareNat.Shared (Judgment (..))
-import Derivation.Format qualified as F
-import Derivation.Nat.Shared (Nat (..))
+import DrvFormat qualified as F
+import DrvSystem.CompareNat.Base (Judgment (..))
+import DrvSystem.Nat (Nat (..))
 
 data Derivation
   = LZero Judgment
   | LSuccSucc Judgment Derivation
 
 derive :: Judgment -> Maybe Derivation
-derive = \case
-  j@(LessThan Z (S _)) -> Just $ LZero j
-  j@(LessThan (S n1) (S n2)) ->
+derive j = case j of
+  LessThan Z (S _) -> Just $ LZero j
+  LessThan (S n1) (S n2) ->
     LSuccSucc j <$> derive (LessThan n1 n2)
   _ -> Nothing
 

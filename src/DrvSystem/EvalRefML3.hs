@@ -1,13 +1,12 @@
-module Derivation.EvalRefML3 where
+module DrvSystem.EvalRefML3 where
 
-import Common.Parser (Parser, intP, lexeme, minusP, mkAppExpP, mkAssocP, mkClosureP, mkFunP, mkIfP, mkLetP, mkLetrecP, mkRecClosureP, mkVarP, symbol)
 import Control.Monad (guard)
 import Control.Monad.Combinators.Expr (Operator (..), makeExprParser)
 import Data.List (intercalate)
 import Data.Maybe (fromMaybe)
-import Derivation.EvalML1 (BinopDerivation, BinopJudgment (..), binopDerive)
-import Derivation.EvalML1.Shared (Prim (..))
-import Derivation.Format qualified as F
+import DrvFormat qualified as F
+import DrvSystem.EvalML1 (BinopDerivation, BinopJudgment (..), Prim (..), deriveBinop)
+import Parser (Parser, intP, lexeme, minusP, mkAppP, mkAssocP, mkClosureP, mkFunP, mkIfP, mkLetP, mkLetrecP, mkRecClosureP, mkVarP, symbol)
 import Text.Megaparsec (MonadParsec (..), between, optional, (<|>))
 import Text.Megaparsec.Char (char)
 
@@ -106,7 +105,7 @@ instance Show Exp where
   show (Assign e1 e2) = show e1 ++ " := " ++ show e2
 
 appExpP :: Parser Exp
-appExpP = mkAppExpP App base
+appExpP = mkAppP App base
  where
   base =
     (Value <$> valueP)
@@ -148,18 +147,17 @@ expP =
     <|> try ifP
     <|> binopExpP
 
-data EvalJudgment
-  = EvalTo Store Env Exp Value Store
+data Judgment = EvalTo Store Env Exp Value Store
 
-instance Show EvalJudgment where
+instance Show Judgment where
   show (EvalTo s1@(Store l1) env e v s2@(Store l2)) =
     prefix ++ show env ++ " |- " ++ show e ++ " evalto " ++ show v ++ suffix
    where
     prefix = if null l1 then "" else show s1 ++ " / "
     suffix = if null l2 then "" else " / " ++ show s2
 
-evalJudgmentP :: Parser EvalJudgment
-evalJudgmentP = do
+judgmentP :: Parser Judgment
+judgmentP = do
   s1 <- fromMaybe (Store []) <$> optional (storeP <* symbol "/")
   env <- envP
   _ <- symbol "|-"
@@ -169,24 +167,24 @@ evalJudgmentP = do
   s2 <- fromMaybe (Store []) <$> optional (symbol "/" *> storeP)
   return $ EvalTo s1 env e v s2
 
-data EvalDerivation
-  = EInt EvalJudgment
-  | EBool EvalJudgment
-  | EIfT EvalJudgment EvalDerivation EvalDerivation
-  | EIfF EvalJudgment EvalDerivation EvalDerivation
-  | EPlus EvalJudgment EvalDerivation EvalDerivation BinopDerivation
-  | EMinus EvalJudgment EvalDerivation EvalDerivation BinopDerivation
-  | ETimes EvalJudgment EvalDerivation EvalDerivation BinopDerivation
-  | ELt EvalJudgment EvalDerivation EvalDerivation BinopDerivation
-  | EVar EvalJudgment
-  | ELet EvalJudgment EvalDerivation EvalDerivation
-  | EFun EvalJudgment
-  | EApp EvalJudgment EvalDerivation EvalDerivation EvalDerivation
-  | ELetRec EvalJudgment EvalDerivation
-  | EAppRec EvalJudgment EvalDerivation EvalDerivation EvalDerivation
-  | ERef EvalJudgment EvalDerivation
-  | EDeref EvalJudgment EvalDerivation
-  | EAssign EvalJudgment EvalDerivation EvalDerivation
+data Derivation
+  = EInt Judgment
+  | EBool Judgment
+  | EIfT Judgment Derivation Derivation
+  | EIfF Judgment Derivation Derivation
+  | EPlus Judgment Derivation Derivation BinopDerivation
+  | EMinus Judgment Derivation Derivation BinopDerivation
+  | ETimes Judgment Derivation Derivation BinopDerivation
+  | ELt Judgment Derivation Derivation BinopDerivation
+  | EVar Judgment
+  | ELet Judgment Derivation Derivation
+  | EFun Judgment
+  | EApp Judgment Derivation Derivation Derivation
+  | ELetRec Judgment Derivation
+  | EAppRec Judgment Derivation Derivation Derivation
+  | ERef Judgment Derivation
+  | EDeref Judgment Derivation
+  | EAssign Judgment Derivation Derivation
 
 type LocList = [String]
 
@@ -194,12 +192,12 @@ newLocs :: Store -> Store -> LocList
 newLocs (Store lBefore) (Store lAfter) =
   reverse $ filter (`notElem` (map fst lBefore)) (map fst lAfter)
 
-evalExp :: Store -> Env -> Exp -> LocList -> Maybe (Value, Store, LocList)
-evalExp s _ (Value v) locs = return (v, s, locs)
-evalExp s (Env el) (Var x) locs = (\v -> (v, s, locs)) <$> lookup x el
-evalExp s1 env (Op op e1 e2) locs1 = do
-  (v1, s2, locs2) <- evalExp s1 env e1 locs1
-  (v2, s3, locs3) <- evalExp s2 env e2 locs2
+eval :: Store -> Env -> Exp -> LocList -> Maybe (Value, Store, LocList)
+eval s _ (Value v) locs = return (v, s, locs)
+eval s (Env el) (Var x) locs = (\v -> (v, s, locs)) <$> lookup x el
+eval s1 env (Op op e1 e2) locs1 = do
+  (v1, s2, locs2) <- eval s1 env e1 locs1
+  (v2, s3, locs3) <- eval s2 env e2 locs2
   (\v -> (v, s3, locs3))
     <$> case (op, v1, v2) of
       (Add, Int i1, Int i2) -> return $ Int $ i1 + i2
@@ -207,57 +205,57 @@ evalExp s1 env (Op op e1 e2) locs1 = do
       (Mult, Int i1, Int i2) -> return $ Int $ i1 * i2
       (Lt, Int i1, Int i2) -> return $ Bool $ i1 < i2
       _ -> Nothing
-evalExp s1 env (If e1 e2 e3) locs1 = do
-  (v1, s2, locs2) <- evalExp s1 env e1 locs1
+eval s1 env (If e1 e2 e3) locs1 = do
+  (v1, s2, locs2) <- eval s1 env e1 locs1
   next <- case v1 of
     Bool b -> return $ if b then e2 else e3
     _ -> Nothing
-  evalExp s2 env next locs2
-evalExp s1 env@(Env el) (Let x e1 e2) locs1 = do
-  (v1, s2, locs2) <- evalExp s1 env e1 locs1
-  evalExp s2 (Env ((x, v1) : el)) e2 locs2
-evalExp s env (ExpFun x e) locs = return $ (Fun env x e, s, locs)
-evalExp s1 env (App e1 e2) locs1 = do
-  (v1, s2, locs2) <- evalExp s1 env e1 locs1
-  (v2, s3, locs3) <- evalExp s2 env e2 locs2
+  eval s2 env next locs2
+eval s1 env@(Env el) (Let x e1 e2) locs1 = do
+  (v1, s2, locs2) <- eval s1 env e1 locs1
+  eval s2 (Env ((x, v1) : el)) e2 locs2
+eval s env (ExpFun x e) locs = return $ (Fun env x e, s, locs)
+eval s1 env (App e1 e2) locs1 = do
+  (v1, s2, locs2) <- eval s1 env e1 locs1
+  (v2, s3, locs3) <- eval s2 env e2 locs2
   case v1 of
     Fun (Env l) x e ->
-      evalExp s3 (Env ((x, v2) : l)) e locs3
+      eval s3 (Env ((x, v2) : l)) e locs3
     rf@(Rec (Env l) x y e) ->
-      evalExp s3 (Env ((y, v2) : (x, rf) : l)) e locs3
+      eval s3 (Env ((y, v2) : (x, rf) : l)) e locs3
     _ -> Nothing
-evalExp s env@(Env l) (LetRec x y e1 e2) locs =
-  evalExp s (Env ((x, Rec env x y e1) : l)) e2 locs
-evalExp s1 env (Ref e) locs1 = do
-  (v, (Store sl2), loc : locs2) <- evalExp s1 env e locs1
+eval s env@(Env l) (LetRec x y e1 e2) locs =
+  eval s (Env ((x, Rec env x y e1) : l)) e2 locs
+eval s1 env (Ref e) locs1 = do
+  (v, (Store sl2), loc : locs2) <- eval s1 env e locs1
   return (Loc loc, Store ((loc, v) : sl2), locs2)
-evalExp s1 env (Deref e) locs1 = do
-  (Loc loc, s2@(Store sl2), locs2) <- evalExp s1 env e locs1
+eval s1 env (Deref e) locs1 = do
+  (Loc loc, s2@(Store sl2), locs2) <- eval s1 env e locs1
   v <- lookup loc sl2
   return (v, s2, locs2)
-evalExp s1 env (Assign e1 e2) locs1 = do
-  (Loc loc, s2, locs2) <- evalExp s1 env e1 locs1
-  (v, s3, locs3) <- evalExp s2 env e2 locs2
+eval s1 env (Assign e1 e2) locs1 = do
+  (Loc loc, s2, locs2) <- eval s1 env e1 locs1
+  (v, s3, locs3) <- eval s2 env e2 locs2
   return (v, updated s3 loc v, locs3)
 
-evalDerive :: EvalJudgment -> Maybe EvalDerivation
-evalDerive = \case
-  j@(EvalTo s _ (Value (Int i1)) (Int i2) s')
+derive :: Judgment -> Maybe Derivation
+derive j = case j of
+  EvalTo s _ (Value (Int i1)) (Int i2) s'
     | i1 == i2 && s == s' -> Just $ EInt j
-  j@(EvalTo s _ (Value (Bool b1)) (Bool b2) s')
+  EvalTo s _ (Value (Bool b1)) (Bool b2) s'
     | b1 == b2 && s == s' -> Just $ EBool j
-  j@(EvalTo s1 env (If e1 e2 e3) v s3) -> do
-    (v1, s2, _) <- evalExp s1 env e1 (newLocs s1 s3)
+  EvalTo s1 env (If e1 e2 e3) v s3 -> do
+    (v1, s2, _) <- eval s1 env e1 (newLocs s1 s3)
     (mkRule, next) <- case v1 of
       Bool True -> return (EIfT, e2)
       Bool False -> return (EIfF, e3)
       _ -> Nothing
     mkRule j
-      <$> evalDerive (EvalTo s1 env e1 v1 s2)
-      <*> evalDerive (EvalTo s2 env next v s3)
-  j@(EvalTo s1 env (Op op e1 e2) v s3) -> do
-    (v1@(Int i1), s2, locs) <- evalExp s1 env e1 (newLocs s1 s3)
-    (v2@(Int i2), s3', _) <- evalExp s2 env e2 locs
+      <$> derive (EvalTo s1 env e1 v1 s2)
+      <*> derive (EvalTo s2 env next v s3)
+  EvalTo s1 env (Op op e1 e2) v s3 -> do
+    (v1@(Int i1), s2, locs) <- eval s1 env e1 (newLocs s1 s3)
+    (v2@(Int i2), s3', _) <- eval s2 env e2 locs
     guard $ s3 == s3'
     (mkRule, jBinop) <- case (op, v) of
       (Add, Int i3) -> Just (EPlus, Plus i1 i2 i3)
@@ -266,59 +264,59 @@ evalDerive = \case
       (Lt, Bool b) -> Just (ELt, LessThan i1 i2 b)
       _ -> Nothing
     mkRule j
-      <$> evalDerive (EvalTo s1 env e1 v1 s2)
-      <*> evalDerive (EvalTo s2 env e2 v2 s3)
-      <*> binopDerive jBinop
-  j@(EvalTo s (Env l) (Var x) v s') | s == s' -> do
+      <$> derive (EvalTo s1 env e1 v1 s2)
+      <*> derive (EvalTo s2 env e2 v2 s3)
+      <*> deriveBinop jBinop
+  EvalTo s (Env l) (Var x) v s' | s == s' -> do
     v1 <- lookup x l
     guard $ v == v1
     return $ EVar j
-  j@(EvalTo s1 env@(Env l) (Let x e1 e2) v s3) -> do
-    (v1, s2, _) <- evalExp s1 env e1 (newLocs s1 s3)
+  EvalTo s1 env@(Env l) (Let x e1 e2) v s3 -> do
+    (v1, s2, _) <- eval s1 env e1 (newLocs s1 s3)
     ELet j
-      <$> evalDerive (EvalTo s1 env e1 v1 s2)
-      <*> evalDerive (EvalTo s2 (Env ((x, v1) : l)) e2 v s3)
-  j@(EvalTo s env (ExpFun x e) (Fun env' x' e') s')
+      <$> derive (EvalTo s1 env e1 v1 s2)
+      <*> derive (EvalTo s2 (Env ((x, v1) : l)) e2 v s3)
+  EvalTo s env (ExpFun x e) (Fun env' x' e') s'
     | s == s' && env == env' && x == x' && e == e' -> return $ EFun j
-  j@(EvalTo s1 env (App e1 e2) v s4) -> do
-    (v1, s2, locs) <- evalExp s1 env e1 (newLocs s1 s4)
-    (v2, s3, _) <- evalExp s2 env e2 locs
+  EvalTo s1 env (App e1 e2) v s4 -> do
+    (v1, s2, locs) <- eval s1 env e1 (newLocs s1 s4)
+    (v2, s3, _) <- eval s2 env e2 locs
     case v1 of
       Fun (Env l2) x e0 ->
         EApp j
-          <$> evalDerive (EvalTo s1 env e1 v1 s2)
-          <*> evalDerive (EvalTo s2 env e2 v2 s3)
-          <*> evalDerive (EvalTo s3 (Env ((x, v2) : l2)) e0 v s4)
+          <$> derive (EvalTo s1 env e1 v1 s2)
+          <*> derive (EvalTo s2 env e2 v2 s3)
+          <*> derive (EvalTo s3 (Env ((x, v2) : l2)) e0 v s4)
       Rec (Env l2) x y e0 ->
         let newenv = Env $ (y, v2) : (x, v1) : l2
          in EAppRec j
-              <$> evalDerive (EvalTo s1 env e1 v1 s2)
-              <*> evalDerive (EvalTo s2 env e2 v2 s3)
-              <*> evalDerive (EvalTo s3 newenv e0 v s4)
+              <$> derive (EvalTo s1 env e1 v1 s2)
+              <*> derive (EvalTo s2 env e2 v2 s3)
+              <*> derive (EvalTo s3 newenv e0 v s4)
       _ -> Nothing
-  j@(EvalTo s1 env@(Env l) (LetRec x y e1 e2) v s2) ->
+  EvalTo s1 env@(Env l) (LetRec x y e1 e2) v s2 ->
     let newenv = Env $ (x, Rec env x y e1) : l
      in ELetRec j
-          <$> evalDerive (EvalTo s1 newenv e2 v s2)
-  j@(EvalTo s1 env (Ref e) (Loc loc) (Store ((loc', v) : s2)))
+          <$> derive (EvalTo s1 newenv e2 v s2)
+  EvalTo s1 env (Ref e) (Loc loc) (Store ((loc', v) : s2))
     | loc == loc' && loc `notElem` (map fst s2) ->
-        ERef j <$> evalDerive (EvalTo s1 env e v (Store s2))
-  j@(EvalTo s1 env (Deref e) v s2@(Store l)) -> do
-    (vl@(Loc loc), s2', _) <- evalExp s1 env e (newLocs s1 s2)
+        ERef j <$> derive (EvalTo s1 env e v (Store s2))
+  EvalTo s1 env (Deref e) v s2@(Store l) -> do
+    (vl@(Loc loc), s2', _) <- eval s1 env e (newLocs s1 s2)
     guard $ s2 == s2'
     guard $ (Just v) == lookup loc l
-    EDeref j <$> evalDerive (EvalTo s1 env e vl s2)
-  j@(EvalTo s1 env (Assign e1 e2) v s4) -> do
-    (vl@(Loc loc), s2, locs) <- evalExp s1 env e1 (newLocs s1 s4)
-    (v', s3, _) <- evalExp s2 env e2 locs
+    EDeref j <$> derive (EvalTo s1 env e vl s2)
+  EvalTo s1 env (Assign e1 e2) v s4 -> do
+    (vl@(Loc loc), s2, locs) <- eval s1 env e1 (newLocs s1 s4)
+    (v', s3, _) <- eval s2 env e2 locs
     guard $ v == v'
     guard $ s4 == updated s3 loc v
     EAssign j
-      <$> evalDerive (EvalTo s1 env e1 vl s2)
-      <*> evalDerive (EvalTo s2 env e2 v s3)
+      <$> derive (EvalTo s1 env e1 vl s2)
+      <*> derive (EvalTo s2 env e2 v s3)
   _ -> Nothing
 
-instance F.FormatDerivation EvalDerivation where
+instance F.FormatDerivation Derivation where
   format = \case
     EInt j -> F.formatBy "E-Int" j []
     EBool j -> F.formatBy "E-Bool" j []

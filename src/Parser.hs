@@ -1,4 +1,4 @@
-module Common.Parser where
+module Parser where
 
 import Control.Applicative (empty)
 import Data.Void (Void)
@@ -84,8 +84,8 @@ mkLetrecP f varP expP = do
   rest <- expP
   return $ f x y body rest
 
-mkAppExpP :: (a -> a -> a) -> Parser a -> Parser a
-mkAppExpP f p = do
+mkAppP :: (a -> a -> a) -> Parser a -> Parser a
+mkAppP f p = do
   first <- p
   rest <- many p
   return $ foldl f first rest

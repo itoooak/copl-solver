@@ -1,7 +1,7 @@
-module Derivation.CompareNat.Shared where
+module DrvSystem.CompareNat.Base where
 
-import Common.Parser (Parser, symbol)
-import Derivation.Nat.Shared (Nat, natP)
+import DrvSystem.Nat (Nat, natP)
+import Parser (Parser, symbol)
 
 data Judgment
   = LessThan Nat Nat

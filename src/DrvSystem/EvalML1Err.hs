@@ -1,9 +1,9 @@
-module Derivation.EvalML1Err where
+module DrvSystem.EvalML1Err where
 
-import Common.Parser (Parser, symbol)
-import Control.Applicative ((<|>))
-import Derivation.EvalML1.Shared (Exp (..), Prim (..), Value (..), evalExp, expP, valueP)
-import Derivation.Format qualified as F
+import DrvFormat qualified as F
+import DrvSystem.EvalML1 (Exp (..), Prim (..), Value (..), eval, expP, valueP)
+import Parser (Parser, symbol)
+import Text.Megaparsec ((<|>))
 
 data Res
   = Val Value
@@ -18,13 +18,13 @@ resP =
   (Val <$> valueP)
     <|> (Error <$ symbol "error")
 
-data EvalJudgment = EvalTo Exp Res
+data Judgment = EvalTo Exp Res
 
-instance Show EvalJudgment where
+instance Show Judgment where
   show (EvalTo e v) = show e ++ " evalto " ++ show v
 
-evalJudgmentP :: Parser EvalJudgment
-evalJudgmentP = do
+judgmentP :: Parser Judgment
+judgmentP = do
   e <- expP
   _ <- symbol "evalto"
   r <- resP
@@ -64,35 +64,35 @@ binopJudgmentP = do
       return $ Times i1 i2 v
     _ -> fail "Incorrect operand type"
 
-data EvalDerivation
-  = EInt EvalJudgment
-  | EBool EvalJudgment
-  | EIfT EvalJudgment EvalDerivation EvalDerivation
-  | EIfF EvalJudgment EvalDerivation EvalDerivation
-  | EPlus EvalJudgment EvalDerivation EvalDerivation BinopDerivation
-  | EMinus EvalJudgment EvalDerivation EvalDerivation BinopDerivation
-  | ETimes EvalJudgment EvalDerivation EvalDerivation BinopDerivation
-  | ELt EvalJudgment EvalDerivation EvalDerivation BinopDerivation
-  | EPlusBoolL EvalJudgment EvalDerivation
-  | EPlusBoolR EvalJudgment EvalDerivation
-  | EPlusErrorL EvalJudgment EvalDerivation
-  | EPlusErrorR EvalJudgment EvalDerivation
-  | EMinusBoolL EvalJudgment EvalDerivation
-  | EMinusBoolR EvalJudgment EvalDerivation
-  | EMinusErrorL EvalJudgment EvalDerivation
-  | EMinusErrorR EvalJudgment EvalDerivation
-  | ETimesBoolL EvalJudgment EvalDerivation
-  | ETimesBoolR EvalJudgment EvalDerivation
-  | ETimesErrorL EvalJudgment EvalDerivation
-  | ETimesErrorR EvalJudgment EvalDerivation
-  | ELtBoolL EvalJudgment EvalDerivation
-  | ELtBoolR EvalJudgment EvalDerivation
-  | ELtErrorL EvalJudgment EvalDerivation
-  | ELtErrorR EvalJudgment EvalDerivation
-  | EIfInt EvalJudgment EvalDerivation
-  | EIfError EvalJudgment EvalDerivation
-  | EIfTError EvalJudgment EvalDerivation EvalDerivation
-  | EIfFError EvalJudgment EvalDerivation EvalDerivation
+data Derivation
+  = EInt Judgment
+  | EBool Judgment
+  | EIfT Judgment Derivation Derivation
+  | EIfF Judgment Derivation Derivation
+  | EPlus Judgment Derivation Derivation BinopDerivation
+  | EMinus Judgment Derivation Derivation BinopDerivation
+  | ETimes Judgment Derivation Derivation BinopDerivation
+  | ELt Judgment Derivation Derivation BinopDerivation
+  | EPlusBoolL Judgment Derivation
+  | EPlusBoolR Judgment Derivation
+  | EPlusErrorL Judgment Derivation
+  | EPlusErrorR Judgment Derivation
+  | EMinusBoolL Judgment Derivation
+  | EMinusBoolR Judgment Derivation
+  | EMinusErrorL Judgment Derivation
+  | EMinusErrorR Judgment Derivation
+  | ETimesBoolL Judgment Derivation
+  | ETimesBoolR Judgment Derivation
+  | ETimesErrorL Judgment Derivation
+  | ETimesErrorR Judgment Derivation
+  | ELtBoolL Judgment Derivation
+  | ELtBoolR Judgment Derivation
+  | ELtErrorL Judgment Derivation
+  | ELtErrorR Judgment Derivation
+  | EIfInt Judgment Derivation
+  | EIfError Judgment Derivation
+  | EIfTError Judgment Derivation Derivation
+  | EIfFError Judgment Derivation Derivation
 
 data BinopDerivation
   = BPlus BinopJudgment
@@ -101,11 +101,11 @@ data BinopDerivation
   | BLT BinopJudgment
 
 data OpSpec = OpSpec
-  { mkNormal :: EvalJudgment -> EvalDerivation -> EvalDerivation -> BinopDerivation -> EvalDerivation
-  , mkBoolL :: EvalJudgment -> EvalDerivation -> EvalDerivation
-  , mkErrorL :: EvalJudgment -> EvalDerivation -> EvalDerivation
-  , mkBoolR :: EvalJudgment -> EvalDerivation -> EvalDerivation
-  , mkErrorR :: EvalJudgment -> EvalDerivation -> EvalDerivation
+  { mkNormal :: Judgment -> Derivation -> Derivation -> BinopDerivation -> Derivation
+  , mkBoolL :: Judgment -> Derivation -> Derivation
+  , mkErrorL :: Judgment -> Derivation -> Derivation
+  , mkBoolR :: Judgment -> Derivation -> Derivation
+  , mkErrorR :: Judgment -> Derivation -> Derivation
   , mkBinopJudgment :: Int -> Int -> Res -> BinopJudgment
   , expectedResult :: Value -> Bool
   }
@@ -161,57 +161,57 @@ opSpec = \case
           _ -> False
       }
 
-evalDerive :: EvalJudgment -> Maybe EvalDerivation
-evalDerive = \case
-  j@(EvalTo (Value (Int i1)) (Val (Int i2))) | i1 == i2 -> Just $ EInt j
-  j@(EvalTo (Value (Bool b1)) (Val (Bool b2))) | b1 == b2 -> Just $ EBool j
-  j@(EvalTo (If e1 e2 e3) Error) ->
-    case evalExp e1 of
+derive :: Judgment -> Maybe Derivation
+derive j = case j of
+  EvalTo (Value (Int i1)) (Val (Int i2)) | i1 == i2 -> Just $ EInt j
+  EvalTo (Value (Bool b1)) (Val (Bool b2)) | b1 == b2 -> Just $ EBool j
+  EvalTo (If e1 e2 e3) Error ->
+    case eval e1 of
       Just (Bool True) ->
-        EIfTError j <$> evalDerive (EvalTo e1 (Val (Bool True))) <*> evalDerive (EvalTo e2 Error)
+        EIfTError j <$> derive (EvalTo e1 (Val (Bool True))) <*> derive (EvalTo e2 Error)
       Just (Bool False) ->
-        EIfFError j <$> evalDerive (EvalTo e1 (Val (Bool False))) <*> evalDerive (EvalTo e3 Error)
+        EIfFError j <$> derive (EvalTo e1 (Val (Bool False))) <*> derive (EvalTo e3 Error)
       Just (Int i) ->
-        EIfInt j <$> evalDerive (EvalTo e1 (Val (Int i)))
+        EIfInt j <$> derive (EvalTo e1 (Val (Int i)))
       Nothing ->
-        EIfError j <$> evalDerive (EvalTo e1 Error)
-  j@(EvalTo (If e1 e2 e3) r) ->
-    case evalExp e1 of
+        EIfError j <$> derive (EvalTo e1 Error)
+  EvalTo (If e1 e2 e3) r ->
+    case eval e1 of
       Just (Bool True) ->
-        EIfT j <$> evalDerive (EvalTo e1 (Val (Bool True))) <*> evalDerive (EvalTo e2 r)
+        EIfT j <$> derive (EvalTo e1 (Val (Bool True))) <*> derive (EvalTo e2 r)
       Just (Bool False) ->
-        EIfF j <$> evalDerive (EvalTo e1 (Val (Bool False))) <*> evalDerive (EvalTo e3 r)
+        EIfF j <$> derive (EvalTo e1 (Val (Bool False))) <*> derive (EvalTo e3 r)
       _ -> Nothing
-  j@(EvalTo (Op op e1 e2) r) -> do
+  EvalTo (Op op e1 e2) r -> do
     withIntOperand j e1 (mkBoolL spec) (mkErrorL spec) $ \i1 ->
       withIntOperand j e2 (mkBoolR spec) (mkErrorR spec) $ \i2 ->
         deriveByResult spec i1 i2
    where
     spec = opSpec op
-    withIntOperand j' e mkBool mkError k = case evalExp e of
+    withIntOperand j' e mkBool mkError k = case eval e of
       Just (Int i) -> k i
-      Just (Bool b) -> mkBool j' <$> evalDerive (EvalTo e (Val (Bool b)))
-      Nothing -> mkError j' <$> evalDerive (EvalTo e Error)
+      Just (Bool b) -> mkBool j' <$> derive (EvalTo e (Val (Bool b)))
+      Nothing -> mkError j' <$> derive (EvalTo e Error)
     deriveByResult s i1 i2 = case r of
       Error -> Nothing
       Val v
         | expectedResult s v ->
             mkNormal s j
-              <$> evalDerive (EvalTo e1 (Val (Int i1)))
-              <*> evalDerive (EvalTo e2 (Val (Int i2)))
-              <*> binopDerive (mkBinopJudgment s i1 i2 (Val v))
+              <$> derive (EvalTo e1 (Val (Int i1)))
+              <*> derive (EvalTo e2 (Val (Int i2)))
+              <*> deriveBinop (mkBinopJudgment s i1 i2 (Val v))
         | otherwise -> Nothing
   _ -> Nothing
 
-binopDerive :: BinopJudgment -> Maybe BinopDerivation
-binopDerive = \case
-  j@(Plus i1 i2 (Val (Int i3))) | i1 + i2 == i3 -> Just $ BPlus j
-  j@(Minus i1 i2 (Val (Int i3))) | i1 - i2 == i3 -> Just $ BMinus j
-  j@(Times i1 i2 (Val (Int i3))) | i1 * i2 == i3 -> Just $ BTimes j
-  j@(LessThan i1 i2 (Val (Bool b))) | (i1 < i2) == b -> Just $ BLT j
+deriveBinop :: BinopJudgment -> Maybe BinopDerivation
+deriveBinop j = case j of
+  Plus i1 i2 (Val (Int i3)) | i1 + i2 == i3 -> Just $ BPlus j
+  Minus i1 i2 (Val (Int i3)) | i1 - i2 == i3 -> Just $ BMinus j
+  Times i1 i2 (Val (Int i3)) | i1 * i2 == i3 -> Just $ BTimes j
+  LessThan i1 i2 (Val (Bool b)) | (i1 < i2) == b -> Just $ BLT j
   _ -> Nothing
 
-instance F.FormatDerivation EvalDerivation where
+instance F.FormatDerivation Derivation where
   format = \case
     EInt j -> F.formatBy "E-Int" j []
     EBool j -> F.formatBy "E-Bool" j []

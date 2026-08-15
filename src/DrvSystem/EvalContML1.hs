@@ -1,10 +1,9 @@
-module Derivation.EvalContML1 where
+module DrvSystem.EvalContML1 where
 
-import Common.Parser (Parser, symbol)
 import Data.Foldable (traverse_)
-import Derivation.EvalML1 (BinopDerivation, BinopJudgment (..), binopDerive)
-import Derivation.EvalML1.Shared (Exp (..), Prim (..), Value (..), expP, valueP)
-import Derivation.Format qualified as F
+import DrvFormat qualified as F
+import DrvSystem.EvalML1 (BinopDerivation, BinopJudgment (..), Exp (..), Prim (..), Value (..), deriveBinop, expP, valueP)
+import Parser (Parser, symbol)
 import Text.Megaparsec (try, (<|>))
 
 data Cont
@@ -54,18 +53,18 @@ contP =
     e2 <- expP
     return $ \k -> CIf e1 e2 k
 
-data EvalJudgment
+data Judgment
   = EEvalTo Exp Cont Value
   | VEvalTo Value Cont Value
 
-instance Show EvalJudgment where
+instance Show Judgment where
   show (EEvalTo e k v) =
     show e ++ " >> " ++ show k ++ " evalto " ++ show v
   show (VEvalTo v1 k v2) =
     show v1 ++ " => " ++ show k ++ " evalto " ++ show v2
 
-evalJudgmentP :: Parser EvalJudgment
-evalJudgmentP =
+judgmentP :: Parser Judgment
+judgmentP =
   try
     ( do
         v1 <- valueP
@@ -91,37 +90,37 @@ evalJudgmentP =
             return $ EEvalTo e CEnd v
         )
 
-data EvalDerivation
-  = EInt EvalJudgment EvalDerivation
-  | EBool EvalJudgment EvalDerivation
-  | EBinOp EvalJudgment EvalDerivation
-  | EIf EvalJudgment EvalDerivation
-  | CRet EvalJudgment
-  | CEvalR EvalJudgment EvalDerivation
-  | CPlus EvalJudgment BinopDerivation EvalDerivation
-  | CMinus EvalJudgment BinopDerivation EvalDerivation
-  | CTimes EvalJudgment BinopDerivation EvalDerivation
-  | CLt EvalJudgment BinopDerivation EvalDerivation
-  | CIfT EvalJudgment EvalDerivation
-  | CIfF EvalJudgment EvalDerivation
+data Derivation
+  = EInt Judgment Derivation
+  | EBool Judgment Derivation
+  | EBinOp Judgment Derivation
+  | EIf Judgment Derivation
+  | CRet Judgment
+  | CEvalR Judgment Derivation
+  | CPlus Judgment BinopDerivation Derivation
+  | CMinus Judgment BinopDerivation Derivation
+  | CTimes Judgment BinopDerivation Derivation
+  | CLt Judgment BinopDerivation Derivation
+  | CIfT Judgment Derivation
+  | CIfF Judgment Derivation
 
-evalDerive :: EvalJudgment -> Maybe EvalDerivation
-evalDerive = \case
-  j@(EEvalTo (Value v1) k v) ->
+derive :: Judgment -> Maybe Derivation
+derive j = case j of
+  EEvalTo (Value v1) k v ->
     let
       mkRule = case v1 of
         Int _ -> EInt
         Bool _ -> EBool
      in
-      mkRule j <$> evalDerive (VEvalTo v1 k v)
-  j@(EEvalTo (Op op e1 e2) k v) ->
-    EBinOp j <$> evalDerive (EEvalTo e1 (COpL op e2 k) v)
-  j@(EEvalTo (If e1 e2 e3) k v) ->
-    EIf j <$> evalDerive (EEvalTo e1 (CIf e2 e3 k) v)
-  j@(VEvalTo v1 CEnd v2) | v1 == v2 -> return $ CRet j
-  j@(VEvalTo v1 (COpL op e k) v2) ->
-    CEvalR j <$> evalDerive (EEvalTo e (COpR op v1 k) v2)
-  j@(VEvalTo (Int i2) (COpR op (Int i1) k) v) ->
+      mkRule j <$> derive (VEvalTo v1 k v)
+  EEvalTo (Op op e1 e2) k v ->
+    EBinOp j <$> derive (EEvalTo e1 (COpL op e2 k) v)
+  EEvalTo (If e1 e2 e3) k v ->
+    EIf j <$> derive (EEvalTo e1 (CIf e2 e3 k) v)
+  VEvalTo v1 CEnd v2 | v1 == v2 -> return $ CRet j
+  VEvalTo v1 (COpL op e k) v2 ->
+    CEvalR j <$> derive (EEvalTo e (COpR op v1 k) v2)
+  VEvalTo (Int i2) (COpR op (Int i1) k) v ->
     let
       (mkRule, next, v1) = case op of
         Add -> (CPlus, Plus i1 i2 (i1 + i2), Int (i1 + i2))
@@ -130,16 +129,16 @@ evalDerive = \case
         Lt -> (CLt, LessThan i1 i2 (i1 < i2), Bool (i1 < i2))
      in
       mkRule j
-        <$> binopDerive next
-        <*> evalDerive (VEvalTo v1 k v)
-  j@(VEvalTo (Bool b) (CIf e1 e2 k) v) ->
+        <$> deriveBinop next
+        <*> derive (VEvalTo v1 k v)
+  VEvalTo (Bool b) (CIf e1 e2 k) v ->
     let
       (mkRule, next) = if b then (CIfT, e1) else (CIfF, e2)
      in
-      mkRule j <$> evalDerive (EEvalTo next k v)
+      mkRule j <$> derive (EEvalTo next k v)
   _ -> Nothing
 
-instance F.FormatDerivation EvalDerivation where
+instance F.FormatDerivation Derivation where
   format = \case
     EInt j p -> F.formatBy "E-Int" j [F.MkDerivation p]
     EBool j p -> F.formatBy "E-Bool" j [F.MkDerivation p]

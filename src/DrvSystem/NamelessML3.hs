@@ -1,12 +1,12 @@
-module Derivation.NamelessML3 where
+module DrvSystem.NamelessML3 where
 
-import Common.Parser (Parser, intP, lexeme, minusP, mkAppExpP, mkClosureP, mkFunP, mkIfP, mkLetP, mkLetrecP, mkRecClosureP, symbol)
 import Control.Monad (guard)
 import Control.Monad.Combinators.Expr (Operator (InfixL), makeExprParser)
 import Data.List (elemIndex, intercalate)
-import Derivation.EvalML1.Shared (Prim (..))
-import Derivation.EvalML3.Shared (Exp (..), Value (..), expP, varP)
-import Derivation.Format qualified as F
+import DrvFormat qualified as F
+import DrvSystem.EvalML1 (Prim (..))
+import DrvSystem.EvalML3 (Exp (..), Value (..), expP, varP)
+import Parser (Parser, intP, lexeme, minusP, mkAppP, mkClosureP, mkFunP, mkIfP, mkLetP, mkLetrecP, mkRecClosureP, symbol)
 import Text.Megaparsec (MonadParsec (try), between, sepBy, (<|>))
 import Text.Megaparsec.Char (char)
 import Text.Megaparsec.Char.Lexer qualified as L
@@ -75,7 +75,7 @@ instance Show DBExp where
     "let rec . = fun . -> " ++ show e1 ++ " in " ++ show e2
 
 dbAppExpP :: Parser DBExp
-dbAppExpP = mkAppExpP DBEApp base
+dbAppExpP = mkAppP DBEApp base
  where
   base =
     (DBEValue <$> dbValueP)
@@ -115,15 +115,14 @@ dbExpP =
     <|> try dbIfP
     <|> dbBinopExpP
 
-data TranslateJudgment
-  = TranslateTo VarList Exp DBExp
+data Judgment = TranslateTo VarList Exp DBExp
 
-instance Show TranslateJudgment where
+instance Show Judgment where
   show (TranslateTo env e d) =
     show env ++ " |- " ++ show e ++ " ==> " ++ show d
 
-translateJudgmentP :: Parser TranslateJudgment
-translateJudgmentP = do
+judgmentP :: Parser Judgment
+judgmentP = do
   env <- varlistP
   _ <- symbol "|-"
   e <- expP
@@ -131,31 +130,31 @@ translateJudgmentP = do
   d <- dbExpP
   return $ TranslateTo env e d
 
-data TranslateDerivation
-  = TrInt TranslateJudgment
-  | TrBool TranslateJudgment
-  | TrIf TranslateJudgment TranslateDerivation TranslateDerivation TranslateDerivation
-  | TrPlus TranslateJudgment TranslateDerivation TranslateDerivation
-  | TrMinus TranslateJudgment TranslateDerivation TranslateDerivation
-  | TrTimes TranslateJudgment TranslateDerivation TranslateDerivation
-  | TrLt TranslateJudgment TranslateDerivation TranslateDerivation
-  | TrVar1 TranslateJudgment
-  | TrVar2 TranslateJudgment TranslateDerivation
-  | TrLet TranslateJudgment TranslateDerivation TranslateDerivation
-  | TrFun TranslateJudgment TranslateDerivation
-  | TrApp TranslateJudgment TranslateDerivation TranslateDerivation
-  | TrLetRec TranslateJudgment TranslateDerivation TranslateDerivation
+data Derivation
+  = TrInt Judgment
+  | TrBool Judgment
+  | TrIf Judgment Derivation Derivation Derivation
+  | TrPlus Judgment Derivation Derivation
+  | TrMinus Judgment Derivation Derivation
+  | TrTimes Judgment Derivation Derivation
+  | TrLt Judgment Derivation Derivation
+  | TrVar1 Judgment
+  | TrVar2 Judgment Derivation
+  | TrLet Judgment Derivation Derivation
+  | TrFun Judgment Derivation
+  | TrApp Judgment Derivation Derivation
+  | TrLetRec Judgment Derivation Derivation
 
-translateDerive :: TranslateJudgment -> Maybe TranslateDerivation
-translateDerive = \case
-  j@(TranslateTo _ (Value (Int i1)) (DBEValue (DBVInt i2))) | i1 == i2 -> Just $ TrInt j
-  j@(TranslateTo _ (Value (Bool b1)) (DBEValue (DBVBool b2))) | b1 == b2 -> Just $ TrBool j
-  j@(TranslateTo vl (If e1 e2 e3) (DBEIf d1 d2 d3)) ->
+derive :: Judgment -> Maybe Derivation
+derive j = case j of
+  TranslateTo _ (Value (Int i1)) (DBEValue (DBVInt i2)) | i1 == i2 -> Just $ TrInt j
+  TranslateTo _ (Value (Bool b1)) (DBEValue (DBVBool b2)) | b1 == b2 -> Just $ TrBool j
+  TranslateTo vl (If e1 e2 e3) (DBEIf d1 d2 d3) ->
     TrIf j
-      <$> translateDerive (TranslateTo vl e1 d1)
-      <*> translateDerive (TranslateTo vl e2 d2)
-      <*> translateDerive (TranslateTo vl e3 d3)
-  j@(TranslateTo vl (Op op e1 e2) (DBEOp dbop d1 d2))
+      <$> derive (TranslateTo vl e1 d1)
+      <*> derive (TranslateTo vl e2 d2)
+      <*> derive (TranslateTo vl e3 d3)
+  TranslateTo vl (Op op e1 e2) (DBEOp dbop d1 d2)
     | op == dbop ->
         let
           mkRule = case op of
@@ -165,30 +164,30 @@ translateDerive = \case
             Lt -> TrLt
          in
           mkRule j
-            <$> translateDerive (TranslateTo vl e1 d1)
-            <*> translateDerive (TranslateTo vl e2 d2)
-  j@(TranslateTo (VarList (x : _)) (Var x1) (DBEVar 1)) | x == x1 -> Just $ TrVar1 j
-  j@(TranslateTo (VarList (y : l)) (Var x) (DBEVar n2)) | y /= x -> do
+            <$> derive (TranslateTo vl e1 d1)
+            <*> derive (TranslateTo vl e2 d2)
+  TranslateTo (VarList (x : _)) (Var x1) (DBEVar 1) | x == x1 -> Just $ TrVar1 j
+  TranslateTo (VarList (y : l)) (Var x) (DBEVar n2) | y /= x -> do
     n1 <- (+ 1) <$> elemIndex x l
     guard (n2 == n1 + 1)
-    TrVar2 j <$> translateDerive (TranslateTo (VarList l) (Var x) (DBEVar n1))
-  j@(TranslateTo vl@(VarList l) (Let x e1 e2) (DBELet d1 d2)) ->
+    TrVar2 j <$> derive (TranslateTo (VarList l) (Var x) (DBEVar n1))
+  TranslateTo vl@(VarList l) (Let x e1 e2) (DBELet d1 d2) ->
     TrLet j
-      <$> translateDerive (TranslateTo vl e1 d1)
-      <*> translateDerive (TranslateTo (VarList (x : l)) e2 d2)
-  j@(TranslateTo (VarList l) (ExFun x e) (DBEFun d)) ->
-    TrFun j <$> translateDerive (TranslateTo (VarList (x : l)) e d)
-  j@(TranslateTo vl (App e1 e2) (DBEApp d1 d2)) ->
+      <$> derive (TranslateTo vl e1 d1)
+      <*> derive (TranslateTo (VarList (x : l)) e2 d2)
+  TranslateTo (VarList l) (ExpFun x e) (DBEFun d) ->
+    TrFun j <$> derive (TranslateTo (VarList (x : l)) e d)
+  TranslateTo vl (App e1 e2) (DBEApp d1 d2) ->
     TrApp j
-      <$> translateDerive (TranslateTo vl e1 d1)
-      <*> translateDerive (TranslateTo vl e2 d2)
-  j@(TranslateTo (VarList l) (LetRec x y e1 e2) (DBERec d1 d2)) ->
+      <$> derive (TranslateTo vl e1 d1)
+      <*> derive (TranslateTo vl e2 d2)
+  TranslateTo (VarList l) (LetRec x y e1 e2) (DBERec d1 d2) ->
     TrLetRec j
-      <$> translateDerive (TranslateTo (VarList (y : x : l)) e1 d1)
-      <*> translateDerive (TranslateTo (VarList (x : l)) e2 d2)
+      <$> derive (TranslateTo (VarList (y : x : l)) e1 d1)
+      <*> derive (TranslateTo (VarList (x : l)) e2 d2)
   _ -> Nothing
 
-instance F.FormatDerivation TranslateDerivation where
+instance F.FormatDerivation Derivation where
   format = \case
     TrInt j -> F.formatBy "Tr-Int" j []
     TrBool j -> F.formatBy "Tr-Bool" j []

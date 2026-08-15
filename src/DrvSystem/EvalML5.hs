@@ -1,15 +1,13 @@
-module Derivation.EvalML5 where
+module DrvSystem.EvalML5 where
 
-import Common.Parser (Parser, intP, lexeme, minusP, mkAppExpP, mkAssocP, mkClosureP, mkFunP, mkIfP, mkLetP, mkLetrecP, mkRecClosureP, mkVarP, symbol)
 import Control.Monad (guard)
-import Control.Monad.Combinators (between)
 import Control.Monad.Combinators.Expr (Operator (InfixL, InfixR), makeExprParser)
 import Data.Foldable (traverse_)
 import Data.List (intercalate)
-import Derivation.EvalML1 (BinopDerivation, BinopJudgment (..), binopDerive)
-import Derivation.EvalML1.Shared (Prim (..))
-import Derivation.Format qualified as F
-import Text.Megaparsec (MonadParsec (try), sepBy1, (<|>))
+import DrvFormat qualified as F
+import DrvSystem.EvalML1 (BinopDerivation, BinopJudgment (..), Prim (..), deriveBinop)
+import Parser (Parser, intP, lexeme, minusP, mkAppP, mkAssocP, mkClosureP, mkFunP, mkIfP, mkLetP, mkLetrecP, mkRecClosureP, mkVarP, symbol)
+import Text.Megaparsec (MonadParsec (try), between, sepBy1, (<|>))
 import Text.Megaparsec.Char.Lexer qualified as L
 
 data Value
@@ -133,7 +131,7 @@ instance Show Exp where
   show (Match e c) = "match " ++ show e ++ " with " ++ show c
 
 appExpP :: Parser Exp
-appExpP = mkAppExpP App base
+appExpP = mkAppP App base
  where
   base =
     (Var <$> varP)
@@ -186,47 +184,47 @@ expP =
     <|> try ifP
     <|> binopExpP
 
-evalExp :: Exp -> Env -> Maybe Value
-evalExp (Value v) _ = Just v
-evalExp (Var x) (Env l) = lookup x l
-evalExp (Op op e1 e2) env = do
-  v1 <- evalExp e1 env
-  v2 <- evalExp e2 env
+eval :: Exp -> Env -> Maybe Value
+eval (Value v) _ = Just v
+eval (Var x) (Env l) = lookup x l
+eval (Op op e1 e2) env = do
+  v1 <- eval e1 env
+  v2 <- eval e2 env
   case (op, v1, v2) of
     (Add, Int i1, Int i2) -> Just $ Int $ i1 + i2
     (Sub, Int i1, Int i2) -> Just $ Int $ i1 - i2
     (Mult, Int i1, Int i2) -> Just $ Int $ i1 * i2
     (Lt, Int i1, Int i2) -> Just $ Bool $ i1 < i2
     _ -> Nothing
-evalExp (If e1 e2 e3) env = do
-  v1 <- evalExp e1 env
+eval (If e1 e2 e3) env = do
+  v1 <- eval e1 env
   case v1 of
-    Bool True -> evalExp e2 env
-    Bool False -> evalExp e3 env
+    Bool True -> eval e2 env
+    Bool False -> eval e3 env
     _ -> Nothing
-evalExp (Let x e1 e2) env@(Env l) = do
-  v1 <- evalExp e1 env
-  evalExp e2 $ Env ((x, v1) : l)
-evalExp (ExpFun x e) env = Just $ Fun env x e
-evalExp (App f arg) env = do
-  fv <- evalExp f env
-  argv <- evalExp arg env
+eval (Let x e1 e2) env@(Env l) = do
+  v1 <- eval e1 env
+  eval e2 $ Env ((x, v1) : l)
+eval (ExpFun x e) env = Just $ Fun env x e
+eval (App f arg) env = do
+  fv <- eval f env
+  argv <- eval arg env
   case fv of
     Fun (Env l) x e -> do
-      evalExp e (Env ((x, argv) : l))
+      eval e (Env ((x, argv) : l))
     rf@(Rec (Env l) x y e) ->
-      evalExp e (Env ((y, argv) : (x, rf) : l))
+      eval e (Env ((y, argv) : (x, rf) : l))
     _ -> Nothing
-evalExp (LetRec x y e1 e2) env@(Env l) =
-  evalExp e2 $ Env ((x, Rec env x y e1) : l)
-evalExp (ExpCons e1 e2) env =
-  Cons <$> evalExp e1 env <*> evalExp e2 env
-evalExp (Match e (Clauses cl)) env@(Env l) = do
-  v <- evalExp e env
+eval (LetRec x y e1 e2) env@(Env l) =
+  eval e2 $ Env ((x, Rec env x y e1) : l)
+eval (ExpCons e1 e2) env =
+  Cons <$> eval e1 env <*> eval e2 env
+eval (Match e (Clauses cl)) env@(Env l) = do
+  v <- eval e env
   let go [] = Nothing
       go ((p', e') : rest) =
         case match p' v of
-          Just (Env l1) -> evalExp e' (Env (l1 ++ l))
+          Just (Env l1) -> eval e' (Env (l1 ++ l))
           Nothing -> go rest
   go cl
 
@@ -238,15 +236,14 @@ instance Show MatchJudgment where
   show (JMatch p v env) = show p ++ " matches " ++ show v ++ "when (" ++ show env ++ ")"
   show (JNMatch p v) = show p ++ " doesn't match " ++ show v
 
-data EvalJudgment
-  = EvalTo Env Exp Value
+data Judgment = EvalTo Env Exp Value
 
-instance Show EvalJudgment where
+instance Show Judgment where
   show (EvalTo env e v) =
     show env ++ " |- " ++ show e ++ " evalto " ++ show v
 
-evalJudgmentP :: Parser EvalJudgment
-evalJudgmentP = do
+judgmentP :: Parser Judgment
+judgmentP = do
   env <- envP
   _ <- symbol "|-"
   e <- expP
@@ -254,46 +251,46 @@ evalJudgmentP = do
   v <- valueP
   return $ EvalTo env e v
 
-data EvalDerivation
-  = EInt EvalJudgment
-  | EBool EvalJudgment
-  | EIfT EvalJudgment EvalDerivation EvalDerivation
-  | EIfF EvalJudgment EvalDerivation EvalDerivation
-  | EPlus EvalJudgment EvalDerivation EvalDerivation BinopDerivation
-  | EMinus EvalJudgment EvalDerivation EvalDerivation BinopDerivation
-  | ETimes EvalJudgment EvalDerivation EvalDerivation BinopDerivation
-  | ELt EvalJudgment EvalDerivation EvalDerivation BinopDerivation
-  | EVar EvalJudgment
-  | ELet EvalJudgment EvalDerivation EvalDerivation
-  | EFun EvalJudgment
-  | EApp EvalJudgment EvalDerivation EvalDerivation EvalDerivation
-  | ELetRec EvalJudgment EvalDerivation
-  | EAppRec EvalJudgment EvalDerivation EvalDerivation EvalDerivation
-  | ENil EvalJudgment
-  | ECons EvalJudgment EvalDerivation EvalDerivation
-  | EMatchM1 EvalJudgment EvalDerivation MatchDerivation EvalDerivation
-  | EMatchM2 EvalJudgment EvalDerivation MatchDerivation EvalDerivation
-  | EMatchN EvalJudgment EvalDerivation MatchDerivation EvalDerivation
+data Derivation
+  = EInt Judgment
+  | EBool Judgment
+  | EIfT Judgment Derivation Derivation
+  | EIfF Judgment Derivation Derivation
+  | EPlus Judgment Derivation Derivation BinopDerivation
+  | EMinus Judgment Derivation Derivation BinopDerivation
+  | ETimes Judgment Derivation Derivation BinopDerivation
+  | ELt Judgment Derivation Derivation BinopDerivation
+  | EVar Judgment
+  | ELet Judgment Derivation Derivation
+  | EFun Judgment
+  | EApp Judgment Derivation Derivation Derivation
+  | ELetRec Judgment Derivation
+  | EAppRec Judgment Derivation Derivation Derivation
+  | ENil Judgment
+  | ECons Judgment Derivation Derivation
+  | EMatchM1 Judgment Derivation MatchDerivation Derivation
+  | EMatchM2 Judgment Derivation MatchDerivation Derivation
+  | EMatchN Judgment Derivation MatchDerivation Derivation
 
-evalDerive :: EvalJudgment -> Maybe EvalDerivation
-evalDerive = \case
-  j@(EvalTo _ (Value (Int i1)) (Int i2)) | i1 == i2 -> return $ EInt j
-  j@(EvalTo _ (Value (Bool b1)) (Bool b2)) | b1 == b2 -> return $ EBool j
-  j@(EvalTo _ (Value Nil) Nil) -> return $ ENil j
-  j@(EvalTo env (Value (Cons v1 v2)) (Cons v1' v2'))
+derive :: Judgment -> Maybe Derivation
+derive j = case j of
+  EvalTo _ (Value (Int i1)) (Int i2) | i1 == i2 -> return $ EInt j
+  EvalTo _ (Value (Bool b1)) (Bool b2) | b1 == b2 -> return $ EBool j
+  EvalTo _ (Value Nil) Nil -> return $ ENil j
+  EvalTo env (Value (Cons v1 v2)) (Cons v1' v2')
     | v1 == v1' && v2 == v2' ->
-        ECons j <$> evalDerive (EvalTo env (Value v1) v1') <*> evalDerive (EvalTo env (Value v2) v2')
-  j@(EvalTo env (If e1 e2 e3) v) -> do
-    v1 <- evalExp e1 env
+        ECons j <$> derive (EvalTo env (Value v1) v1') <*> derive (EvalTo env (Value v2) v2')
+  EvalTo env (If e1 e2 e3) v -> do
+    v1 <- eval e1 env
     (rule, next) <- case v1 of
       Bool b -> return $ if b then (EIfT, e2) else (EIfF, e3)
       _ -> Nothing
     rule j
-      <$> evalDerive (EvalTo env e1 v1)
-      <*> evalDerive (EvalTo env next v)
-  j@(EvalTo env (Op op e1 e2) v) -> do
-    v1@(Int i1) <- evalExp e1 env
-    v2@(Int i2) <- evalExp e2 env
+      <$> derive (EvalTo env e1 v1)
+      <*> derive (EvalTo env next v)
+  EvalTo env (Op op e1 e2) v -> do
+    v1@(Int i1) <- eval e1 env
+    v2@(Int i2) <- eval e2 env
     (mkRule, jBinop) <- case (op, v) of
       (Add, Int i3) -> return (EPlus, Plus i1 i2 i3)
       (Sub, Int i3) -> return (EMinus, Minus i1 i2 i3)
@@ -301,61 +298,61 @@ evalDerive = \case
       (Lt, Bool b) -> return (ELt, LessThan i1 i2 b)
       _ -> Nothing
     mkRule j
-      <$> evalDerive (EvalTo env e1 v1)
-      <*> evalDerive (EvalTo env e2 v2)
-      <*> binopDerive jBinop
-  j@(EvalTo (Env l) (Var x) v) -> do
+      <$> derive (EvalTo env e1 v1)
+      <*> derive (EvalTo env e2 v2)
+      <*> deriveBinop jBinop
+  EvalTo (Env l) (Var x) v -> do
     v1 <- lookup x l
     guard (v == v1)
     Just $ EVar j
-  j@(EvalTo env@(Env l) (Let x e1 e2) v) -> do
-    v1 <- evalExp e1 env
+  EvalTo env@(Env l) (Let x e1 e2) v -> do
+    v1 <- eval e1 env
     ELet j
-      <$> evalDerive (EvalTo env e1 v1)
-      <*> evalDerive (EvalTo (Env ((x, v1) : l)) e2 v)
-  j@(EvalTo env1 (ExpFun x1 e1) (Fun env2 x2 e2))
+      <$> derive (EvalTo env e1 v1)
+      <*> derive (EvalTo (Env ((x, v1) : l)) e2 v)
+  EvalTo env1 (ExpFun x1 e1) (Fun env2 x2 e2)
     | x1 == x2 && e1 == e2 && env1 == env2 -> Just $ EFun j
-  j@(EvalTo env (App e1 e2) v) -> do
-    v1 <- evalExp e1 env
-    v2 <- evalExp e2 env
+  EvalTo env (App e1 e2) v -> do
+    v1 <- eval e1 env
+    v2 <- eval e2 env
     case v1 of
       Fun fenv@(Env fl) x e ->
         EApp j
-          <$> evalDerive (EvalTo env e1 (Fun fenv x e))
-          <*> evalDerive (EvalTo env e2 v2)
-          <*> evalDerive (EvalTo (Env ((x, v2) : fl)) e v)
+          <$> derive (EvalTo env e1 (Fun fenv x e))
+          <*> derive (EvalTo env e2 v2)
+          <*> derive (EvalTo (Env ((x, v2) : fl)) e v)
       rf@(Rec rfenv@(Env fl) x y e) ->
         EAppRec j
-          <$> evalDerive (EvalTo env e1 (Rec rfenv x y e))
-          <*> evalDerive (EvalTo env e2 v2)
-          <*> evalDerive (EvalTo (Env ((y, v2) : (x, rf) : fl)) e v)
+          <$> derive (EvalTo env e1 (Rec rfenv x y e))
+          <*> derive (EvalTo env e2 v2)
+          <*> derive (EvalTo (Env ((y, v2) : (x, rf) : fl)) e v)
       _ -> Nothing
-  j@(EvalTo env@(Env l) (LetRec x y e1 e2) v) ->
-    ELetRec j <$> evalDerive (EvalTo newenv e2 v)
+  EvalTo env@(Env l) (LetRec x y e1 e2) v ->
+    ELetRec j <$> derive (EvalTo newenv e2 v)
    where
     newenv = Env $ (x, Rec env x y e1) : l
-  j@(EvalTo env (ExpCons e1 e2) (Cons v1 v2)) ->
+  EvalTo env (ExpCons e1 e2) (Cons v1 v2) ->
     ECons j
-      <$> evalDerive (EvalTo env e1 v1)
-      <*> evalDerive (EvalTo env e2 v2)
-  j@(EvalTo env@(Env l) (Match e0 (Clauses ((p, e) : cl))) v') -> do
-    v <- evalExp e0 env
+      <$> derive (EvalTo env e1 v1)
+      <*> derive (EvalTo env e2 v2)
+  EvalTo env@(Env l) (Match e0 (Clauses ((p, e) : cl))) v' -> do
+    v <- eval e0 env
     case (match p v, cl) of
       (Just env1@(Env l1), []) ->
         EMatchM1 j
-          <$> evalDerive (EvalTo env e0 v)
-          <*> matchDerive (JMatch p v env1)
-          <*> evalDerive (EvalTo (Env (l1 ++ l)) e v')
+          <$> derive (EvalTo env e0 v)
+          <*> deriveMatch (JMatch p v env1)
+          <*> derive (EvalTo (Env (l1 ++ l)) e v')
       (Just env1@(Env l1), _) ->
         EMatchM2 j
-          <$> evalDerive (EvalTo env e0 v)
-          <*> matchDerive (JMatch p v env1)
-          <*> evalDerive (EvalTo (Env (l1 ++ l)) e v')
+          <$> derive (EvalTo env e0 v)
+          <*> deriveMatch (JMatch p v env1)
+          <*> derive (EvalTo (Env (l1 ++ l)) e v')
       (Nothing, (_ : _)) ->
         EMatchN j
-          <$> evalDerive (EvalTo env e0 v)
-          <*> matchDerive (JNMatch p v)
-          <*> evalDerive (EvalTo env (Match e0 (Clauses cl)) v')
+          <$> derive (EvalTo env e0 v)
+          <*> deriveMatch (JNMatch p v)
+          <*> derive (EvalTo env (Match e0 (Clauses cl)) v')
       _ -> Nothing
   _ -> Nothing
 
@@ -369,28 +366,28 @@ data MatchDerivation
   | NMConsConsL MatchJudgment MatchDerivation
   | NMConsConsR MatchJudgment MatchDerivation
 
-matchDerive :: MatchJudgment -> Maybe MatchDerivation
-matchDerive = \case
-  j@(JMatch (PVar x) v (Env [(x', v')])) | x == x' && v == v' -> return $ MVar j
-  j@(JMatch PNil Nil (Env [])) -> return $ MNil j
-  j@(JMatch (PCons p1 p2) (Cons v1 v2) env) -> do
+deriveMatch :: MatchJudgment -> Maybe MatchDerivation
+deriveMatch j = case j of
+  JMatch (PVar x) v (Env [(x', v')]) | x == x' && v == v' -> return $ MVar j
+  JMatch PNil Nil (Env []) -> return $ MNil j
+  JMatch (PCons p1 p2) (Cons v1 v2) env -> do
     env1@(Env l1) <- match p1 v1
     env2@(Env l2) <- match p2 v2
     guard $ all (`notElem` map fst l2) (map fst l1)
     guard $ env == Env (l2 ++ l1)
     MCons j
-      <$> matchDerive (JMatch p1 v1 env1)
-      <*> matchDerive (JMatch p2 v2 env2)
-  j@(JMatch PWild _ (Env [])) -> return $ MWild j
-  j@(JNMatch PNil (Cons _ _)) -> return $ NMConsNil j
-  j@(JNMatch (PCons _ _) Nil) -> return $ NMNilCons j
-  j@(JNMatch (PCons p1 p2) (Cons v1 v2)) -> do
+      <$> deriveMatch (JMatch p1 v1 env1)
+      <*> deriveMatch (JMatch p2 v2 env2)
+  JMatch PWild _ (Env []) -> return $ MWild j
+  JNMatch PNil (Cons _ _) -> return $ NMConsNil j
+  JNMatch (PCons _ _) Nil -> return $ NMNilCons j
+  JNMatch (PCons p1 p2) (Cons v1 v2) -> do
     case match p1 v1 of
-      Nothing -> NMConsConsL j <$> matchDerive (JNMatch p1 v1)
-      Just _ -> NMConsConsR j <$> matchDerive (JNMatch p2 v2)
+      Nothing -> NMConsConsL j <$> deriveMatch (JNMatch p1 v1)
+      Just _ -> NMConsConsR j <$> deriveMatch (JNMatch p2 v2)
   _ -> Nothing
 
-instance F.FormatDerivation EvalDerivation where
+instance F.FormatDerivation Derivation where
   format = \case
     EInt j -> F.formatBy "E-Int" j []
     EBool j -> F.formatBy "E-Bool" j []

@@ -1,4 +1,4 @@
-module Derivation.Format where
+module DrvFormat where
 
 import Data.Char (isSpace)
 import Data.List (intercalate)
