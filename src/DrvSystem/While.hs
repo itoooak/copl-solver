@@ -1,36 +1,22 @@
-module Derivation.While where
+module DrvSystem.While where
 
-import Common.Parser (Parser, lexeme, symbol)
 import Control.Monad (guard)
 import Control.Monad.Combinators.Expr (Operator (..), makeExprParser)
 import Data.List (intercalate)
-import Derivation.Format qualified as F
-import Text.Megaparsec (MonadParsec (..), between, many, sepBy, (<|>))
-import Text.Megaparsec.Char (alphaNumChar, char, letterChar)
-import Text.Megaparsec.Char.Lexer qualified as L
+import DrvFormat qualified as F
+import Parser (Parser, intP, mkAssocP, mkIfP, mkVarP, symbol)
+import Text.Megaparsec (MonadParsec (..), between, (<|>))
 
 type Store = [(String, Int)]
 
 varP :: Parser String
-varP = lexeme $ try $ do
-  name <- lexeme $ (:) <$> letterChar <*> many (alphaNumChar <|> char '_')
-  if name `elem` reservedWords
-    then fail $ "reserved word `" ++ name ++ "` cannot be a variable"
-    else return name
+varP = mkVarP extraChars reservedWords
  where
+  extraChars = ['_']
   reservedWords = ["true", "false", "if", "then", "else", "evalto", "while", "do"]
 
-intP :: Parser Int
-intP = lexeme $ L.signed (return ()) L.decimal
-
 storeP :: Parser Store
-storeP = reverse <$> assignmentP `sepBy` symbol ","
- where
-  assignmentP = do
-    x <- varP
-    _ <- symbol "="
-    i <- intP
-    return (x, i)
+storeP = mkAssocP id varP "=" intP
 
 updated :: Store -> String -> Int -> Store
 updated [] _ _ = undefined
@@ -103,7 +89,7 @@ bexpP = makeExprParser base table
  where
   base =
     (Bool True <$ symbol "true")
-      <|> (Bool True <$ symbol "true")
+      <|> (Bool False <$ symbol "false")
       <|> (Neg <$ symbol "!" *> base)
       <|> try compP
       <|> between (symbol "(") (symbol ")") bexpP
@@ -179,14 +165,7 @@ comP = makeExprParser base [[InfixL (Seq <$ symbol ";")]]
     _ <- symbol ":="
     a <- aexpP
     return $ Assign x a
-  ifP = do
-    _ <- symbol "if"
-    b <- bexpP
-    _ <- symbol "then"
-    c1 <- comP
-    _ <- symbol "else"
-    c2 <- comP
-    return $ If b c1 c2
+  ifP = mkIfP If bexpP comP
   whileP = do
     _ <- symbol "while"
     b <- between (symbol "(") (symbol ")") bexpP
@@ -223,14 +202,13 @@ instance Show EvalJudgment where
    where
     showBool bv' = if bv' then "true" else "false"
 
-data ChangesJudgment
-  = ChangesTo Com Store Store
+data Judgment = ChangesTo Com Store Store
 
-instance Show ChangesJudgment where
+instance Show Judgment where
   show (ChangesTo c s1 s2) = show c ++ " changes " ++ showStore s1 ++ " to " ++ showStore s2
 
-changesJudgmentP :: Parser ChangesJudgment
-changesJudgmentP = do
+judgmentP :: Parser Judgment
+judgmentP = do
   c <- comP
   _ <- symbol "changes"
   s1 <- storeP
@@ -252,11 +230,11 @@ data EvalDerivation
   | BEq EvalJudgment EvalDerivation EvalDerivation
   | BLe EvalJudgment EvalDerivation EvalDerivation
 
-evalDerive :: EvalJudgment -> Maybe EvalDerivation
-evalDerive = \case
-  j@(AEvalTo _ (Int i1) i2) | i1 == i2 -> return $ AConst j
-  j@(AEvalTo s (Var x) i) | lookup x s == Just i -> return $ AVar j
-  j@(AEvalTo s (AOp op a1 a2) i3) -> do
+deriveEval :: EvalJudgment -> Maybe EvalDerivation
+deriveEval j = case j of
+  AEvalTo _ (Int i1) i2 | i1 == i2 -> return $ AConst j
+  AEvalTo s (Var x) i | lookup x s == Just i -> return $ AVar j
+  AEvalTo s (AOp op a1 a2) i3 -> do
     i1 <- evalAExp s a1
     i2 <- evalAExp s a2
     let (rule, i3') = case op of
@@ -265,14 +243,14 @@ evalDerive = \case
           Mult -> (AMinus, i1 * i2)
     guard $ i3 == i3'
     rule j
-      <$> evalDerive (AEvalTo s a1 i1)
-      <*> evalDerive (AEvalTo s a2 i2)
-  j@(BEvalTo _ (Bool bv1) bv2) | bv1 == bv2 -> return $ BConst j
-  j@(BEvalTo s (Neg b) bv2) -> do
+      <$> deriveEval (AEvalTo s a1 i1)
+      <*> deriveEval (AEvalTo s a2 i2)
+  BEvalTo _ (Bool bv1) bv2 | bv1 == bv2 -> return $ BConst j
+  BEvalTo s (Neg b) bv2 -> do
     bv1 <- evalBExp s b
     guard $ not bv1 == bv2
-    BNot j <$> evalDerive (BEvalTo s b bv2)
-  j@(BEvalTo s (LOp op b1 b2) bv3) -> do
+    BNot j <$> deriveEval (BEvalTo s b bv2)
+  BEvalTo s (LOp op b1 b2) bv3 -> do
     bv1 <- evalBExp s b1
     bv2 <- evalBExp s b2
     let (rule, bv3') = case op of
@@ -280,9 +258,9 @@ evalDerive = \case
           LOr -> (BOr, bv1 || bv2)
     guard $ bv3 == bv3'
     rule j
-      <$> evalDerive (BEvalTo s b1 bv1)
-      <*> evalDerive (BEvalTo s b2 bv2)
-  j@(BEvalTo s (Comp op a1 a2) bv) -> do
+      <$> deriveEval (BEvalTo s b1 bv1)
+      <*> deriveEval (BEvalTo s b2 bv2)
+  BEvalTo s (Comp op a1 a2) bv -> do
     i1 <- evalAExp s a1
     i2 <- evalAExp s a2
     let (rule, bv') = case op of
@@ -291,49 +269,49 @@ evalDerive = \case
           Le -> (BLt, i1 <= i2)
     guard $ bv == bv'
     rule j
-      <$> evalDerive (AEvalTo s a1 i1)
-      <*> evalDerive (AEvalTo s a2 i2)
+      <$> deriveEval (AEvalTo s a1 i1)
+      <*> deriveEval (AEvalTo s a2 i2)
   _ -> Nothing
 
-data ChangesDerivation
-  = CSkip ChangesJudgment
-  | CAssign ChangesJudgment EvalDerivation
-  | CSeq ChangesJudgment ChangesDerivation ChangesDerivation
-  | CIfT ChangesJudgment EvalDerivation ChangesDerivation
-  | CIfF ChangesJudgment EvalDerivation ChangesDerivation
-  | CWhileT ChangesJudgment EvalDerivation ChangesDerivation ChangesDerivation
-  | CWhileF ChangesJudgment EvalDerivation
+data Derivation
+  = CSkip Judgment
+  | CAssign Judgment EvalDerivation
+  | CSeq Judgment Derivation Derivation
+  | CIfT Judgment EvalDerivation Derivation
+  | CIfF Judgment EvalDerivation Derivation
+  | CWhileT Judgment EvalDerivation Derivation Derivation
+  | CWhileF Judgment EvalDerivation
 
-changesDerive :: ChangesJudgment -> Maybe ChangesDerivation
-changesDerive = \case
-  j@(ChangesTo Skip s1 s2) | s1 == s2 -> return $ CSkip j
-  j@(ChangesTo (Assign x a) s1 s2) -> do
+derive :: Judgment -> Maybe Derivation
+derive j = case j of
+  ChangesTo Skip s1 s2 | s1 == s2 -> return $ CSkip j
+  ChangesTo (Assign x a) s1 s2 -> do
     i <- evalAExp s1 a
     guard $ s2 == updated s1 x i
-    CAssign j <$> evalDerive (AEvalTo s1 a i)
-  j@(ChangesTo (Seq c1 c2) s1 s3) -> do
+    CAssign j <$> deriveEval (AEvalTo s1 a i)
+  ChangesTo (Seq c1 c2) s1 s3 -> do
     s2 <- evalCom s1 c1
     CSeq j
-      <$> changesDerive (ChangesTo c1 s1 s2)
-      <*> changesDerive (ChangesTo c2 s2 s3)
-  j@(ChangesTo (If b c1 c2) s1 s2) -> do
+      <$> derive (ChangesTo c1 s1 s2)
+      <*> derive (ChangesTo c2 s2 s3)
+  ChangesTo (If b c1 c2) s1 s2 -> do
     bv <- evalBExp s1 b
     let (rule, next) = if bv then (CIfT, c1) else (CIfF, c2)
     rule j
-      <$> evalDerive (BEvalTo s1 b bv)
-      <*> changesDerive (ChangesTo next s1 s2)
-  j@(ChangesTo cw@(While b c) s1 s3) -> do
+      <$> deriveEval (BEvalTo s1 b bv)
+      <*> derive (ChangesTo next s1 s2)
+  ChangesTo cw@(While b c) s1 s3 -> do
     bv <- evalBExp s1 b
     if bv
       then do
         s2 <- evalCom s1 c
         CWhileT j
-          <$> evalDerive (BEvalTo s1 b True)
-          <*> changesDerive (ChangesTo c s1 s2)
-          <*> changesDerive (ChangesTo cw s2 s3)
+          <$> deriveEval (BEvalTo s1 b True)
+          <*> derive (ChangesTo c s1 s2)
+          <*> derive (ChangesTo cw s2 s3)
       else do
         guard $ s1 == s3
-        CWhileF j <$> evalDerive (BEvalTo s1 b False)
+        CWhileF j <$> deriveEval (BEvalTo s1 b False)
   _ -> Nothing
 
 instance F.FormatDerivation EvalDerivation where
@@ -351,7 +329,7 @@ instance F.FormatDerivation EvalDerivation where
     BEq j d1 d2 -> F.formatBy "B-Eq" j [F.MkDerivation d1, F.MkDerivation d2]
     BLe j d1 d2 -> F.formatBy "B-Le" j [F.MkDerivation d1, F.MkDerivation d2]
 
-instance F.FormatDerivation ChangesDerivation where
+instance F.FormatDerivation Derivation where
   format = \case
     CSkip j -> F.formatBy "C-Skip" j []
     CAssign j p -> F.formatBy "C-Assign" j [F.MkDerivation p]

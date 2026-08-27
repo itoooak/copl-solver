@@ -1,15 +1,15 @@
-module Derivation.PolyTypingML4 where
+module DrvSystem.PolyTypingML4 where
 
-import Common.Parser (Parser, lexeme, symbol)
 import Control.Monad.Combinators.Expr (Operator (..), makeExprParser)
 import Control.Monad.State (MonadState (..), MonadTrans (lift), StateT (runStateT), gets, modify)
 import Data.Char (chr, ord)
 import Data.List (intercalate)
 import Data.Maybe (fromMaybe)
 import Data.Set qualified as Set
-import Derivation.EvalML1.Shared (Prim (..))
-import Derivation.EvalML4.Shared (Exp (..), Value (..), expP, varP)
-import Derivation.Format qualified as F
+import DrvFormat qualified as F
+import DrvSystem.EvalML1 (Prim (..))
+import DrvSystem.EvalML4 (Exp (..), Value (..), expP, varP)
+import Parser (Parser, lexeme, mkAssocP, symbol)
 import Text.Megaparsec (between, optional, sepBy, (<|>))
 import Text.Megaparsec.Char (char, lowerChar, space)
 import Text.Megaparsec.Char.Lexer qualified as L
@@ -85,31 +85,23 @@ tyP = makeExprParser tAtomP [[InfixR (TyFun <$ symbol "->")]]
       Just _ -> return $ TyList t
       Nothing -> return t
 
-data TyEnv
-  = TyEnv [(String, TySc)]
+data TyEnv = TyEnv [(String, TySc)]
 
 instance Show TyEnv where
   show (TyEnv l) =
     intercalate ", " $ map (\(x, v) -> x ++ " : " ++ show v) $ reverse l
 
 tyEnvP :: Parser TyEnv
-tyEnvP = TyEnv <$> reverse <$> assignmentP `sepBy` symbol ","
- where
-  assignmentP = do
-    name <- varP
-    _ <- symbol ":"
-    t <- tyscP
-    return (name, t)
+tyEnvP = mkAssocP TyEnv varP ":" tyscP
 
-data TypingJudgment
-  = HasType TyEnv Exp Ty
+data Judgment = HasType TyEnv Exp Ty
 
-instance Show TypingJudgment where
+instance Show Judgment where
   show (HasType te e t) =
     show te ++ " |- " ++ show e ++ " : " ++ show t
 
-typingJudgmentP :: Parser TypingJudgment
-typingJudgmentP = do
+judgmentP :: Parser Judgment
+judgmentP = do
   te <- tyEnvP
   _ <- symbol "|-"
   e <- expP
@@ -117,22 +109,22 @@ typingJudgmentP = do
   t <- tyP
   return $ HasType te e t
 
-data TypingDerivation
-  = TInt TypingJudgment
-  | TBool TypingJudgment
-  | TIf TypingJudgment TypingDerivation TypingDerivation TypingDerivation
-  | TPlus TypingJudgment TypingDerivation TypingDerivation
-  | TMinus TypingJudgment TypingDerivation TypingDerivation
-  | TTimes TypingJudgment TypingDerivation TypingDerivation
-  | TLt TypingJudgment TypingDerivation TypingDerivation
-  | TVar TypingJudgment
-  | TLet TypingJudgment TypingDerivation TypingDerivation
-  | TFun TypingJudgment TypingDerivation
-  | TApp TypingJudgment TypingDerivation TypingDerivation
-  | TLetRec TypingJudgment TypingDerivation TypingDerivation
-  | TNil TypingJudgment
-  | TCons TypingJudgment TypingDerivation TypingDerivation
-  | TMatch TypingJudgment TypingDerivation TypingDerivation TypingDerivation
+data Derivation
+  = TInt Judgment
+  | TBool Judgment
+  | TIf Judgment Derivation Derivation Derivation
+  | TPlus Judgment Derivation Derivation
+  | TMinus Judgment Derivation Derivation
+  | TTimes Judgment Derivation Derivation
+  | TLt Judgment Derivation Derivation
+  | TVar Judgment
+  | TLet Judgment Derivation Derivation
+  | TFun Judgment Derivation
+  | TApp Judgment Derivation Derivation
+  | TLetRec Judgment Derivation Derivation
+  | TNil Judgment
+  | TCons Judgment Derivation Derivation
+  | TMatch Judgment Derivation Derivation Derivation
 
 type Subst = [(Int, Ty)]
 data TIState = TIState {tiCounter :: Int, tiSubst :: Subst}
@@ -187,26 +179,26 @@ unify t1 t2 = do
     TyList t -> occur n t
     _ -> False
 
-infer :: TypingJudgment -> TI TypingDerivation
-infer = \case
-  j@(HasType _ (Value (Int _)) t) -> do
+infer :: Judgment -> TI Derivation
+infer j = case j of
+  HasType _ (Value (Int _)) t -> do
     unify t TyInt
     return $ TInt j
-  j@(HasType _ (Value (Bool _)) t) -> do
+  HasType _ (Value (Bool _)) t -> do
     unify t TyBool
     return $ TBool j
-  j@(HasType te (Value (Cons v1 v2)) t) -> do
+  HasType te (Value (Cons v1 v2)) t -> do
     t1 <- fresh
     unify t (TyList t1)
     TCons j
       <$> infer (HasType te (Value v1) t1)
       <*> infer (HasType te (Value v2) t)
-  j@(HasType te (If e1 e2 e3) t) ->
+  HasType te (If e1 e2 e3) t ->
     TIf j
       <$> infer (HasType te e1 TyBool)
       <*> infer (HasType te e2 t)
       <*> infer (HasType te e3 t)
-  j@(HasType te (Op op e1 e2) t) -> do
+  HasType te (Op op e1 e2) t -> do
     d1 <- infer $ HasType te e1 TyInt
     d2 <- infer $ HasType te e2 TyInt
     (mkRule, unifyT) <- case op of
@@ -216,46 +208,46 @@ infer = \case
       Lt -> return $ (TLt, TyBool)
     unify t unifyT
     return $ mkRule j d1 d2
-  j@(HasType (TyEnv l) (Var x) t) -> do
+  HasType (TyEnv l) (Var x) t -> do
     TySc vl t1 <- lift $ lookup x l
     subst <- mapM (\n -> (n,) <$> fresh) vl
     let t1' = applyPure subst t1
     unify t t1'
     return $ TVar j
-  j@(HasType te@(TyEnv l) (Let x e1 e2) t) -> do
+  HasType te@(TyEnv l) (Let x e1 e2) t -> do
     t1 <- fresh
     d1 <- infer (HasType te e1 t1)
     t1' <- closure t1 te
     TLet j d1
       <$> infer (HasType (TyEnv ((x, t1') : l)) e2 t)
-  j@(HasType (TyEnv l) (ExpFun x e) t) -> do
+  HasType (TyEnv l) (ExpFun x e) t -> do
     t1 <- fresh
     t2 <- fresh
     unify t (TyFun t1 t2)
     TFun j <$> infer (HasType (TyEnv ((x, TySc [] t1) : l)) e t2)
-  j@(HasType te (App e1 e2) t2) -> do
+  HasType te (App e1 e2) t2 -> do
     t1 <- fresh
     TApp j
       <$> infer (HasType te e1 (TyFun t1 t2))
       <*> infer (HasType te e2 t1)
-  j@(HasType te@(TyEnv l) (LetRec x y e1 e2) t) -> do
+  HasType te@(TyEnv l) (LetRec x y e1 e2) t -> do
     t1 <- fresh
     t2 <- fresh
     d1 <- infer (HasType (TyEnv ((y, TySc [] t1) : (x, TySc [] (TyFun t1 t2)) : l)) e1 t2)
     tf <- closure (TyFun t1 t2) te
     TLetRec j d1
       <$> infer (HasType (TyEnv ((x, tf) : l)) e2 t)
-  j@(HasType _ (Value Nil) t) -> do
+  HasType _ (Value Nil) t -> do
     t1 <- fresh
     unify t (TyList t1)
     return $ TNil j
-  j@(HasType te (ExpCons e1 e2) t) -> do
+  HasType te (ExpCons e1 e2) t -> do
     t1 <- fresh
     unify t (TyList t1)
     TCons j
       <$> infer (HasType te e1 t1)
       <*> infer (HasType te e2 t)
-  j@(HasType te@(TyEnv l) (Match e1 e2 x y e3) t) -> do
+  HasType te@(TyEnv l) (Match e1 e2 x y e3) t -> do
     t' <- fresh
     let t1 = TyList t'
     TMatch j
@@ -264,7 +256,7 @@ infer = \case
       <*> infer (HasType (TyEnv ((y, TySc [] t1) : (x, TySc [] t') : l)) e3 t)
   _ -> lift Nothing
 
-maxTyVar :: TypingJudgment -> Int
+maxTyVar :: Judgment -> Int
 maxTyVar (HasType (TyEnv l) _ t) =
   maximum $ aux t : map (\(_, TySc _ t') -> aux t') l
  where
@@ -274,7 +266,7 @@ maxTyVar (HasType (TyEnv l) _ t) =
     TyList t1 -> aux t1
     _ -> -1
 
-getRenameSubst :: TypingJudgment -> TypingDerivation -> Subst
+getRenameSubst :: Judgment -> Derivation -> Subst
 getRenameSubst (HasType _ _ tIn) d = renameSubst tOut tIn
  where
   renameSubst (TyVar n1) (TyVar n2) = [(n1, TyVar n2)]
@@ -302,15 +294,15 @@ getRenameSubst (HasType _ _ tIn) d = renameSubst tOut tIn
     TCons j' _ _ -> j'
     TMatch j' _ _ _ -> j'
 
-typingDerive :: TypingJudgment -> Maybe TypingDerivation
-typingDerive j = do
+derive :: Judgment -> Maybe Derivation
+derive j = do
   let initCnt = 1 + (maxTyVar j)
   (d, s) <- runStateT (infer j) (TIState initCnt [])
   let d' = applyD (tiSubst s) d
   let renameSubst = getRenameSubst j d'
   return $ applyD renameSubst $ d'
  where
-  applyD :: Subst -> TypingDerivation -> TypingDerivation
+  applyD :: Subst -> Derivation -> Derivation
   applyD s = \case
     TInt j' -> TInt (f j')
     TBool j' -> TBool (f j')
@@ -331,7 +323,7 @@ typingDerive j = do
     f = applyJ s
     g = applyD s
 
-  applyJ :: Subst -> TypingJudgment -> TypingJudgment
+  applyJ :: Subst -> Judgment -> Judgment
   applyJ s (HasType (TyEnv l) e t) =
     HasType (TyEnv (map (\(x, TySc l' t') -> (x, TySc l' (applyT s t' l'))) l)) e (applyT s t [])
 
@@ -344,7 +336,7 @@ typingDerive j = do
   applyT s (TyList t) l'' = TyList (applyT s t l'')
   applyT _ t _ = t
 
-instance F.FormatDerivation TypingDerivation where
+instance F.FormatDerivation Derivation where
   format = \case
     TInt j -> F.formatBy "T-Int" j []
     TBool j -> F.formatBy "T-Bool" j []

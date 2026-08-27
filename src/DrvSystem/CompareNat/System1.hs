@@ -1,0 +1,20 @@
+module DrvSystem.CompareNat.System1 where
+
+import DrvFormat qualified as F
+import DrvSystem.CompareNat.Base (Judgment (..))
+import DrvSystem.Nat (Nat (..))
+
+data Derivation
+  = LSucc Judgment
+  | LTrans Judgment Derivation Derivation
+
+derive :: Judgment -> Maybe Derivation
+derive j@(LessThan n1 n2)
+  | S n1 == n2 = Just $ LSucc j
+  | otherwise =
+      LTrans j <$> derive (LessThan n1 (S n1)) <*> derive (LessThan (S n1) n2)
+
+instance F.FormatDerivation Derivation where
+  format = \case
+    LSucc j -> F.formatBy "L-Succ" j []
+    LTrans j p1 p2 -> F.formatBy "L-Trans" j [F.MkDerivation p1, F.MkDerivation p2]
